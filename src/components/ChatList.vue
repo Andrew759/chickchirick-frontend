@@ -1,52 +1,50 @@
 <template>
   <div class="sidebar">
-    <div class="header">Чаты</div>
+    <div class="header">Chats</div>
 
     <div
       v-for="chat in chats"
       :key="chat.id"
       class="chat"
-      :class="{ active: chat.id === activeChat?.id }"
-      @click="$emit('selectChat', chat)"
+      :class="{ active: chat.id === store.activeChatId }"
+      @click="store.setActiveChat(chat.id)"
     >
-      <img :src="chat.avatar" class="avatar" />
+      <div class="avatar">{{ chat.name[0] }}</div>
 
       <div class="info">
-        <div class="top">
-          <span class="name">{{ chat.name }}</span>
-          <span class="time">{{ chat.time }}</span>
+        <div class="name">{{ chat.name }}</div>
+        <div class="last">
+          {{ chat.messages.at(-1)?.text }}
         </div>
-        <div class="last">{{ chat.lastMessage }}</div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-defineProps(['chats', 'activeChat'])
+import { computed } from 'vue'
+import { useChatStore } from '../stores/chat'
+
+const store = useChatStore()
+const chats = computed(() => store.chats)
 </script>
 
 <style>
 .sidebar {
-  width: 320px;
-  background: #fff;
+  width: 300px;
+  background: white;
   border-right: 1px solid #ddd;
 }
 
 .header {
   padding: 15px;
   font-weight: bold;
-  border-bottom: 1px solid #eee;
 }
 
 .chat {
   display: flex;
-  padding: 12px;
+  padding: 10px;
   cursor: pointer;
-}
-
-.chat:hover {
-  background: #f5f5f5;
 }
 
 .chat.active {
@@ -54,32 +52,16 @@ defineProps(['chats', 'activeChat'])
 }
 
 .avatar {
-  width: 45px;
-  height: 45px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
+  background: #ccc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .info {
   margin-left: 10px;
-  flex: 1;
-}
-
-.top {
-  display: flex;
-  justify-content: space-between;
-}
-
-.name {
-  font-weight: 600;
-}
-
-.time {
-  font-size: 12px;
-  color: gray;
-}
-
-.last {
-  font-size: 14px;
-  color: #666;
 }
 </style>

@@ -1,50 +1,37 @@
 <template>
   <div class="layout">
-    <ChatList
-      :chats="chats"
-      :activeChat="activeChat"
-      @selectChat="selectChat"
-    />
+    <ChatList />
 
-    <ChatWindow
-      v-if="activeChat"
-      :chat="activeChat"
-      @sendMessage="sendMessage"
-    />
+    <ChatWindow v-if="store.activeChat" />
+    <div v-else class="empty">Выберите чат</div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onMounted } from 'vue'
+import { connectSocket, subscribe } from './services/socket'
+import { useChatStore } from './stores/chat'
+
 import ChatList from './components/ChatList.vue'
 import ChatWindow from './components/ChatWindow.vue'
 
-const chats = ref([
-  {
-    id: 1,
-    name: 'Миха',
-    avatar: 'https://i.pravatar.cc/40?img=13',
-    lastMessage: 'Как дела?',
-    time: '15:51',
-    messages: [
-      { id: 1, text: 'Привет!', fromMe: false },
-      { id: 2, text: 'Как дела?', fromMe: false }
-    ]
+const store = useChatStore()
+
+onMounted(() => {
+  const token = localStorage.getItem('token') || 'test-token'
+
+  connectSocket(token)
+  subscribe(handleEvent)
+})
+
+function handleEvent(event) {
+  if (event.message) {
+    store.upsertMessage(event.message)
   }
-])
 
-const activeChat = ref(chats.value[0])
-
-const selectChat = (chat) => {
-  activeChat.value = chat
-}
-
-const sendMessage = (text) => {
-  activeChat.value.messages.push({
-    id: Date.now(),
-    text,
-    fromMe: true
-  })
+  if (event.deletedMessageId) {
+    store.deleteMessage(event.deletedMessageId)
+  }
 }
 </script>
 
@@ -53,5 +40,10 @@ const sendMessage = (text) => {
   display: flex;
   height: 100vh;
   background: #e5ddd5;
+}
+
+.empty {
+  margin: auto;
+  color: gray;
 }
 </style>

@@ -1,15 +1,9 @@
 <template>
   <div class="chat-window">
-    <!-- Header -->
-    <div class="chat-header">
-      <img :src="chat.avatar" class="avatar" />
-      <div>
-        <div class="name">{{ chat.name }}</div>
-        <div class="status">online</div>
-      </div>
+    <div class="header">
+      {{ chat.name }}
     </div>
 
-    <!-- Messages -->
     <div class="messages">
       <div
         v-for="msg in chat.messages"
@@ -20,19 +14,32 @@
       </div>
     </div>
 
-    <!-- Input -->
     <MessageInput @send="handleSend" />
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useChatStore } from '../stores/chat'
+import { sendMessage } from '../services/socket'
 import MessageInput from './MessageInput.vue'
 
-const props = defineProps(['chat'])
-const emit = defineEmits(['sendMessage'])
+const store = useChatStore()
+const chat = computed(() => store.activeChat)
 
-const handleSend = (text) => {
-  emit('sendMessage', text)
+function handleSend(text) {
+  sendMessage({
+    recipientId: chat.value.id,
+    text
+  })
+
+  // optimistic UI
+  store.upsertMessage({
+    id: Date.now(),
+    text,
+    senderId: store.myUserId,
+    recipientId: chat.value.id
+  })
 }
 </script>
 
@@ -43,35 +50,27 @@ const handleSend = (text) => {
   flex-direction: column;
 }
 
-.chat-header {
-  display: flex;
-  align-items: center;
+.header {
   padding: 10px;
   background: #ededed;
-  border-bottom: 1px solid #ddd;
 }
 
 .messages {
   flex: 1;
-  padding: 15px;
+  padding: 10px;
   overflow-y: auto;
 }
 
 .bubble {
-  max-width: 60%;
-  padding: 10px 14px;
-  margin: 6px 0;
-  border-radius: 12px;
   background: white;
+  padding: 8px 12px;
+  border-radius: 10px;
+  margin: 5px 0;
+  max-width: 60%;
 }
 
 .bubble.me {
-  margin-left: auto;
   background: #dcf8c6;
-}
-
-.status {
-  font-size: 12px;
-  color: идфс;
+  margin-left: auto;
 }
 </style>

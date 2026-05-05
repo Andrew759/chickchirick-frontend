@@ -1,9 +1,9 @@
 <template>
-  <div class="input-area">
+  <div class="input">
     <input
       v-model="text"
       @keyup.enter="send"
-      placeholder="Сообщение"
+      placeholder="Message"
     />
     <button @click="send">➤</button>
   </div>
@@ -15,15 +15,16 @@ import { ref } from 'vue'
 const text = ref('')
 const emit = defineEmits(['send'])
 
-const send = () => {
+function send() {
   if (!text.value.trim()) return
+
   emit('send', text.value)
   text.value = ''
 }
 </script>
 
 <style>
-.input-area {
+.input {
   display: flex;
   padding: 10px;
   background: #f0f0f0;
@@ -34,15 +35,9 @@ input {
   padding: 10px;
   border-radius: 20px;
   border: none;
-  outline: none;
 }
 
 button {
   margin-left: 10px;
-  border: none;
-  background: #0088cc;
-  color: white;
-  border-radius: 50%;
-  width: 40px;
 }
 </style>
