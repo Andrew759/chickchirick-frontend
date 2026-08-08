@@ -4,7 +4,8 @@ export const useChatStore = defineStore('chat', {
     state: () => ({
         chats: [],
         activeChatId: null,
-        myUserId: 1 // ⚠️ заменить на реальный ID из auth
+        myUserId: 1, //TODO: заменить на реальный ID из auth
+        isAuthenticated: false // Флаг состояния авторизации пользователя
     }),
 
     getters: {
@@ -14,6 +15,11 @@ export const useChatStore = defineStore('chat', {
     },
 
     actions: {
+        // Метод переключения состояния авторизации, вызываемый в App.vue
+        setAuthenticated(value) {
+            this.isAuthenticated = value
+        },
+
         upsertMessage(msg) {
             const isMine = msg.senderId === this.myUserId
 
