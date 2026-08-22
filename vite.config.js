@@ -1,16 +1,21 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-
+//TODO: не для прода. Проксировать в nginx
 export default defineConfig({
   plugins: [vue()],
   server: {
-    port: 5173,
     proxy: {
-      // Все запросы, начинающиеся с /api, Vite перенаправит на ваш Go бэкенд
-      '/api': {
-        target: 'http://localhost:8081',
+      // Перенаправляем запросы пользователей на :8081
+      '/api/user': {
+        target: 'http://127.0.0.1:8081',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '') // удаляем префикс /api при пересылке
+        rewrite: (path) => path.replace(/^\/api\/user/, '')
+      },
+      // Перенаправляем запросы сообщений на :8083
+      '/api/messages': {
+        target: 'http://127.0.0.1:8083',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/messages/, '')
       }
     }
   }

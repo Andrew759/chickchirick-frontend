@@ -6,7 +6,7 @@
       <button class="btn-profile" @click="store.setView('profile')">Профиль</button>
     </div>
 
-    <!-- Заглушка, если чатов пока нет -->
+    <!-- Реальные чаты, полученные из messages API -->
     <div v-if="chats.length === 0" class="no-chats">No active chats</div>
 
     <div
@@ -32,49 +32,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useChatStore } from '../stores/chat'
 
 const store = useChatStore()
 const chats = computed(() => store.chats)
-
-// Наполняем стор моками при загрузке компонента, если он пуст
-onMounted(() => {
-  if (store.chats.length === 0) {
-    store.chats = [
-      {
-        id: 2,
-        name: 'Алексей Иванов',
-        messages: [
-          { id: 101, text: 'Привет! Как дела?', fromMe: false },
-          { id: 102, text: 'Привет, всё отлично!', fromMe: true },
-          { id: 103, text: 'Слушай, проект chickChirick уже готов к деплою?', fromMe: false }
-        ]
-      },
-      {
-        id: 3,
-        name: 'Команда Разработки',
-        messages: [
-          { id: 201, text: 'Андрей, посмотри плиз код валидатора', fromMe: false },
-          { id: 202, text: 'Там каскадная проверка падает', fromMe: false }
-        ]
-      },
-      {
-        id: 4,
-        name: 'Елена Кузнецова',
-        messages: [
-          { id: 301, text: 'Встреча в 15:00, не забудь', fromMe: false },
-          { id: 302, text: 'Помню, спасибо!', fromMe: true }
-        ]
-      },
-      {
-        id: 5,
-        name: 'Иван Петров',
-        messages: [] // Чат без сообщений для проверки заглушки 'No messages'
-      }
-    ]
-  }
-})
 </script>
 
 <style scoped>

@@ -18,10 +18,14 @@ import { onMounted } from 'vue'
 import { connectSocket, subscribe } from './services/socket'
 import { useChatStore } from './stores/chat'
 
-import ChatList from './components/ChatList.vue' // Это ваша обновленная sidebar-панель
-import UserProfile from './components/UserProfile.vue' // Новый компонент профиля
+import ChatList from './components/ChatList.vue'
+import UserProfile from './components/UserProfile.vue'
 import ChatWindow from './components/ChatWindow.vue'
 import RegisterForm from './components/RegisterForm.vue'
+
+//TODO Настройки перенаправления на порты :8081 и :8083 задаются в vite.config.js или Nginx.
+const USER_API_PREFIX = '/api/user'
+const MESSAGES_API_PREFIX = '/api/messages'
 
 const store = useChatStore()
 
@@ -31,7 +35,7 @@ onMounted(async () => {
 
 async function checkAuth() {
   try {
-    const response = await fetch('http://localhost:8081/frontend/user/me', {
+    const response = await fetch(`${USER_API_PREFIX}/frontend/user/me`, {
       method: 'GET',
       credentials: 'include'
     })
@@ -39,8 +43,13 @@ async function checkAuth() {
     if (response.ok) {
       const result = await response.json().catch(() => ({}))
       store.setAuthenticated(true)
+
+      // Извлекаем токен для веб-сокетов, если он используется
       const socketToken = result.payload?.id || 'cookie-session'
       initChatSession(socketToken)
+
+      // Куки на этот запрос прикрепятся автоматически, так как домен для браузера один и тот же
+      await loadMessageHistory()
     } else {
       store.setAuthenticated(false)
     }
@@ -50,6 +59,20 @@ async function checkAuth() {
   }
 }
 
+async function loadMessageHistory() {
+  const response = await fetch(`${MESSAGES_API_PREFIX}/messages/history`, {
+    method: 'GET',
+    credentials: 'include'
+  })
+
+  if (!response.ok) {
+    throw new Error(`Messages API: ${response.status}`)
+  }
+
+  const history = await response.json()
+  store.setHistory(history)
+}
+
 function initChatSession(token) {
   connectSocket(token)
   subscribe(handleEvent)
@@ -57,7 +80,7 @@ function initChatSession(token) {
 
 async function handleRegisterSuccess(userData) {
   try {
-    const response = await fetch('http://localhost:8081/frontend/user', {
+    const response = await fetch(`${USER_API_PREFIX}/frontend/user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -71,6 +94,9 @@ async function handleRegisterSuccess(userData) {
 
     const result = await response.json().catch(() => ({}))
     store.setAuthenticated(true)
+
+    await loadMessageHistory()
+
     const sessionToken = result.payload?.id || 'cookie-session'
     initChatSession(sessionToken)
   } catch (error) {

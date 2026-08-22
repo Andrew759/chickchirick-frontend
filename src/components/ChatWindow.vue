@@ -33,13 +33,7 @@ function handleSend(text) {
     text
   })
 
-  // optimistic UI
-  store.upsertMessage({
-    id: Date.now(),
-    text,
-    senderId: store.myUserId,
-    recipientId: chat.value.id
-  })
+
 }
 </script>
 
