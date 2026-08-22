@@ -4,8 +4,9 @@ export const useChatStore = defineStore('chat', {
     state: () => ({
         chats: [],
         activeChatId: null,
-        myUserId: 1, //TODO: заменить на реальный ID из auth
-        isAuthenticated: false // Флаг состояния авторизации пользователя
+        myUserId: 1,  //TODO: заменить на реальный ID из auth
+        isAuthenticated: false, // Флаг состояния авторизации пользователя
+        currentView: 'chats'
     }),
 
     getters: {
@@ -15,16 +16,16 @@ export const useChatStore = defineStore('chat', {
     },
 
     actions: {
-        // Метод переключения состояния авторизации, вызываемый в App.vue
         setAuthenticated(value) {
             this.isAuthenticated = value
         },
-
+        // Переключатель экранов левой панели
+        setView(view) {
+            this.currentView = view
+        },
         upsertMessage(msg) {
             const isMine = msg.senderId === this.myUserId
-
             const chatId = isMine ? msg.recipientId : msg.senderId
-
             let chat = this.chats.find(c => c.id === chatId)
 
             if (!chat) {
@@ -36,7 +37,6 @@ export const useChatStore = defineStore('chat', {
                 this.chats.push(chat)
             }
 
-            // защита от дублей
             if (chat.messages.find(m => m.id === msg.id)) return
 
             chat.messages.push({
@@ -45,13 +45,11 @@ export const useChatStore = defineStore('chat', {
                 fromMe: isMine
             })
         },
-
         deleteMessage(id) {
             this.chats.forEach(chat => {
                 chat.messages = chat.messages.filter(m => m.id !== id)
             })
         },
-
         setActiveChat(id) {
             this.activeChatId = id
         }

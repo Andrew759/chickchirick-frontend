@@ -1,13 +1,13 @@
 <template>
-  <!-- Показываем чат, если пользователь авторизован -->
   <div v-if="store.isAuthenticated" class="layout">
-    <ChatList />
+    <!-- Динамическое переключение левой панели -->
+    <ChatList v-if="store.currentView === 'chats'" />
+    <UserProfile v-else-if="store.currentView === 'profile'" />
 
     <ChatWindow v-if="store.activeChat" />
     <div v-else class="empty">Выберите чат</div>
   </div>
 
-  <!-- Если токенов в куках нет, показываем форму регистрации -->
   <div v-else class="auth-wrapper">
     <RegisterForm @register-success="handleRegisterSuccess" />
   </div>
@@ -18,7 +18,8 @@ import { onMounted } from 'vue'
 import { connectSocket, subscribe } from './services/socket'
 import { useChatStore } from './stores/chat'
 
-import ChatList from './components/ChatList.vue'
+import ChatList from './components/ChatList.vue' // Это ваша обновленная sidebar-панель
+import UserProfile from './components/UserProfile.vue' // Новый компонент профиля
 import ChatWindow from './components/ChatWindow.vue'
 import RegisterForm from './components/RegisterForm.vue'
 
@@ -27,10 +28,10 @@ const store = useChatStore()
 onMounted(async () => {
   await checkAuth()
 })
-//TODO: удалить хардкод
+
 async function checkAuth() {
   try {
-    const response = await fetch('http://localhost:8081/health', {
+    const response = await fetch('http://localhost:8081/frontend/user/me', {
       method: 'GET',
       credentials: 'include'
     })
@@ -38,7 +39,6 @@ async function checkAuth() {
     if (response.ok) {
       const result = await response.json().catch(() => ({}))
       store.setAuthenticated(true)
-
       const socketToken = result.payload?.id || 'cookie-session'
       initChatSession(socketToken)
     } else {
@@ -55,15 +55,11 @@ function initChatSession(token) {
   subscribe(handleEvent)
 }
 
-//TODO: удалить хардкод
-// Обработка успешной регистрации и отправка данных на Go-бэкенд
 async function handleRegisterSuccess(userData) {
   try {
-    const response = await fetch('http://127.0.0.0:8081/frontend/user', {
+    const response = await fetch('http://localhost:8081/frontend/user', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify(userData)
     })
@@ -75,10 +71,8 @@ async function handleRegisterSuccess(userData) {
 
     const result = await response.json().catch(() => ({}))
     store.setAuthenticated(true)
-
     const sessionToken = result.payload?.id || 'cookie-session'
     initChatSession(sessionToken)
-
   } catch (error) {
     console.error('Ошибка регистрации на бэкенде:', error.message)
     alert(`Не удалось завершить регистрацию: ${error.message}`)
@@ -86,13 +80,8 @@ async function handleRegisterSuccess(userData) {
 }
 
 function handleEvent(event) {
-  if (event.message) {
-    store.upsertMessage(event.message)
-  }
-
-  if (event.deletedMessageId) {
-    store.deleteMessage(event.deletedMessageId)
-  }
+  if (event.message) store.upsertMessage(event.message)
+  if (event.deletedMessageId) store.deleteMessage(event.deletedMessageId)
 }
 </script>
 
@@ -102,12 +91,10 @@ function handleEvent(event) {
   height: 100vh;
   background: #e5ddd5;
 }
-
 .empty {
   margin: auto;
   color: gray;
 }
-
 .auth-wrapper {
   background: #f0f2f5;
   height: 100vh;
