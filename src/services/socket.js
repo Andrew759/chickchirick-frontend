@@ -7,7 +7,7 @@ export function connectSocket() {
         return
     }
 
-    socket = new WebSocket('ws://localhost:8085/ws')
+    socket = new WebSocket('ws://localhost:83/ws')
 
     socket.onopen = () => {
         console.log('WS connected')
