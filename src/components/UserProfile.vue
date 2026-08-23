@@ -64,6 +64,7 @@ async function fetchUserProfile() {
     error.value = null
 
 //TODO: кидать запрос в проксю nginx
+
     const response = await fetch('http://localhost:8081/frontend/profile', {
       method: 'GET',
       credentials: 'include' // Передаем HttpOnly куки на бэкенд

@@ -44,11 +44,10 @@ async function checkAuth() {
       const result = await response.json().catch(() => ({}))
       store.setAuthenticated(true)
 
-      // Извлекаем токен для веб-сокетов, если он используется
-      const socketToken = result.payload?.id || 'cookie-session'
+      // access_token обычно в httpOnly cookie — передаём только если бэк отдал JWT в body
+      const socketToken = result.accessToken || result.access_token || result.payload?.accessToken || null
       initChatSession(socketToken)
 
-      // Куки на этот запрос прикрепятся автоматически, так как домен для браузера один и тот же
       await loadMessageHistory()
     } else {
       store.setAuthenticated(false)
@@ -97,8 +96,8 @@ async function handleRegisterSuccess(userData) {
 
     await loadMessageHistory()
 
-    const sessionToken = result.payload?.id || 'cookie-session'
-    initChatSession(sessionToken)
+    const socketToken = result.accessToken || result.access_token || result.payload?.accessToken || null
+    initChatSession(socketToken)
   } catch (error) {
     console.error('Ошибка регистрации на бэкенде:', error.message)
     alert(`Не удалось завершить регистрацию: ${error.message}`)
