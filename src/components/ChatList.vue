@@ -1,13 +1,11 @@
 <template>
   <div class="sidebar">
-    <!-- Шапка с кнопкой переключения в профиль -->
     <div class="header">
       <span>Чаты</span>
       <button class="btn-profile" @click="store.setView('profile')">Профиль</button>
     </div>
 
-    <!-- Реальные чаты, полученные из messages API -->
-    <div v-if="chats.length === 0" class="no-chats">No active chats</div>
+    <div v-if="chats.length === 0" class="no-chats">Нет активных чатов</div>
 
     <div
       v-for="chat in chats"
@@ -16,15 +14,19 @@
       :class="{ active: chat.id === store.activeChatId }"
       @click="store.setActiveChat(chat.id)"
     >
-      <!-- Безопасное извлечение первой буквы с проверкой на пустоту -->
       <div class="avatar">
-        {{ chat.name ? chat.name[0].toUpperCase() : '?' }}
+        {{ avatarLetter(chat) }}
       </div>
 
       <div class="info">
-        <div class="name">{{ chat.name }}</div>
+        <div class="row">
+          <div class="name">{{ chat.name }}</div>
+          <div class="time" v-if="formatMessageTime(lastMessage(chat)?.createdAt)">
+            {{ formatMessageTime(lastMessage(chat)?.createdAt) }}
+          </div>
+        </div>
         <div class="last">
-          {{ chat.messages.at(-1)?.text || 'No messages' }}
+          {{ lastMessage(chat)?.text || 'No messages' }}
         </div>
       </div>
     </div>
@@ -33,10 +35,20 @@
 
 <script setup>
 import { computed } from 'vue'
-import { useChatStore } from '../stores/chat'
+import { useChatStore, formatMessageTime } from '../stores/chat'
 
 const store = useChatStore()
 const chats = computed(() => store.chats)
+
+function lastMessage(chat) {
+  return chat.messages?.at(-1) ?? null
+}
+
+function avatarLetter(chat) {
+  const n = (chat.name || '').trim()
+  if (!n || n.startsWith('User ')) return '?'
+  return n[0].toUpperCase()
+}
 </script>
 
 <style scoped>
@@ -57,7 +69,6 @@ const chats = computed(() => store.chats)
   align-items: center;
 }
 
-/* Новые стили для кнопки профиля в шапке */
 .btn-profile {
   background: none;
   border: 1px solid #00a884;
@@ -112,6 +123,14 @@ const chats = computed(() => store.chats)
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .name {
@@ -120,6 +139,12 @@ const chats = computed(() => store.chats)
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.time {
+  font-size: 12px;
+  color: #999;
+  flex-shrink: 0;
 }
 
 .last {

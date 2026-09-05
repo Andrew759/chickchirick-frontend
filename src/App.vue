@@ -1,6 +1,5 @@
 <template>
   <div v-if="store.isAuthenticated" class="layout">
-    <!-- Динамическое переключение левой панели -->
     <ChatList v-if="store.currentView === 'chats'" />
     <UserProfile v-else-if="store.currentView === 'profile'" />
 
@@ -16,6 +15,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { connectSocket, subscribe } from './services/socket'
+import { resolveChatUsers } from './services/users'
 import { useChatStore } from './stores/chat'
 
 import ChatList from './components/ChatList.vue'
@@ -44,11 +44,11 @@ async function checkAuth() {
       const result = await response.json().catch(() => ({}))
       store.setAuthenticated(true)
 
-      // access_token обычно в httpOnly cookie — передаём только если бэк отдал JWT в body
       const socketToken = result.accessToken || result.access_token || result.payload?.accessToken || null
       initChatSession(socketToken)
 
       await loadMessageHistory()
+      await loadChatNames()
     } else {
       store.setAuthenticated(false)
     }
@@ -70,6 +70,17 @@ async function loadMessageHistory() {
 
   const history = await response.json()
   store.setHistory(history)
+}
+
+/** Подтянуть имя + фамилию собеседников в список чатов */
+async function loadChatNames() {
+  try {
+    const ids = store.chats.map((c) => c.id)
+    const users = await resolveChatUsers(ids)
+    store.setUsersInfo(users)
+  } catch (e) {
+    console.warn('Не удалось загрузить имена чатов:', e)
+  }
 }
 
 function initChatSession(token) {
@@ -95,6 +106,7 @@ async function handleRegisterSuccess(userData) {
     store.setAuthenticated(true)
 
     await loadMessageHistory()
+    await loadChatNames()
 
     const socketToken = result.accessToken || result.access_token || result.payload?.accessToken || null
     initChatSession(socketToken)
@@ -105,7 +117,16 @@ async function handleRegisterSuccess(userData) {
 }
 
 function handleEvent(event) {
-  if (event.message) store.upsertMessage(event.message)
+  if (event.message) {
+    store.upsertMessage(event.message)
+    // если появился новый чат без имени — догрузим
+    const sid = Number(event.message.senderId)
+    const rid = Number(event.message.recipientId)
+    const peerId = sid === store.myUserId ? rid : sid
+    if (peerId && !store.usersById[peerId]) {
+      loadChatNames()
+    }
+  }
   if (event.deletedMessageId) store.deleteMessage(event.deletedMessageId)
 }
 </script>
