@@ -252,7 +252,20 @@ export const useChatStore = defineStore('chat', {
       this.myUserId = Number(history.userId)
       this.chats = []
 
-      for (const message of history.messages || []) {
+      const messages = history.messages || []
+
+      // 1) Сначала поднимаем все E2EE-ключи из истории (и старые __E2EE_KEY__ анонсы)
+      for (const message of messages) {
+        const rawText = message.text ?? message.Text ?? ''
+        if (!isKeyAnnounce(rawText)) continue
+        const sid = Number(message.senderId)
+        if (sid && sid !== this.myUserId) {
+          tryConsumeKeyAnnounce(sid, rawText)
+        }
+      }
+
+      // 2) Затем обычные сообщения (decrypt уже видит ключи)
+      for (const message of messages) {
         this.upsertMessage(message)
       }
 
@@ -312,7 +325,7 @@ export const useChatStore = defineStore('chat', {
 
       const entry = {
         id: msg.id,
-        text: encrypted ? (isMine ? '🔒 …' : '🔒 Расшифровка…') : extra.text,
+        text: encrypted ? '…' : extra.text,
         fileUuid: extra.fileUuid,
         fileName: extra.fileName,
         isImage: extra.isImage,

@@ -20,7 +20,6 @@
         <span class="chat-title">
           <span class="chat-name">{{ chat.name }}</span>
           <span v-if="isPeerTyping" class="typing-status">печатает...</span>
-          <span v-else-if="e2eeActive" class="e2ee-status" title="Сообщения шифруются на устройстве">🔒 E2EE</span>
         </span>
       </button>
     </div>
@@ -107,10 +106,7 @@
             ×
           </button>
         </div>
-        <div class="time">
-          <span v-if="msg.isEncrypted" class="e2ee-lock" title="Сквозное шифрование">🔒</span>
-          {{ formatMessageTime(msg.createdAt) || '·' }}
-        </div>
+        <div class="time">{{ formatMessageTime(msg.createdAt) || '·' }}</div>
       </div>
     </div>
 
@@ -139,12 +135,11 @@ import { sendMessage, sendTyping, requestDeleteMessage } from '../services/socke
 import { uploadFile, linkFileToMessage, getFileUrl } from '../services/files'
 import { buildFileMessageText } from '../services/fileMarker'
 import {
-  ensureIdentity,
   canEncryptFor,
   encryptForPeer,
-  buildKeyAnnounceMessage,
+  prepareE2eeForPeer,
   getPeerPublicKey
-} from '../services/crypto'
+} from '../services/crypto' 
 import MessageInput from './MessageInput.vue'
 import PhotoViewer from './PhotoViewer.vue'
 import VideoViewer from './VideoViewer.vue'
@@ -165,7 +160,6 @@ const voiceQueue = computed(() =>
 )
 const chatUser = computed(() => store.usersById[chat.value?.id] || {})
 const isPeerTyping = computed(() => Boolean(chat.value?.id && store.typingByChatId[chat.value.id]))
-const e2eeActive = computed(() => Boolean(chat.value?.id && canEncryptFor(chat.value.id)))
 const emit = defineEmits(['open-profile', 'back'])
 const messagesEl = ref(null)
 
@@ -229,24 +223,8 @@ function handleTyping(active) {
  * публичный ключ собеседника. Если ключа нет — шлём анонс своего ключа.
  */
 async function ensureE2eeReady(recipientId) {
-  try {
-    await ensureIdentity()
-  } catch (e) {
-    console.warn('E2EE identity:', e)
-    return false
-  }
-
-  if (!getPeerPublicKey(recipientId)) {
-    // Анонсируем свой ключ — собеседник сохранит и ответит своим
-    try {
-      const announce = await buildKeyAnnounceMessage()
-      sendMessage({ recipientId, text: announce })
-    } catch (e) {
-      console.warn('E2EE key announce failed:', e)
-    }
-    return false
-  }
-  return true
+  // Ключи через REST, в ленту ничего не пишем
+  return prepareE2eeForPeer(recipientId)
 }
 
 /**
@@ -254,7 +232,14 @@ async function ensureE2eeReady(recipientId) {
  */
 async function maybeEncrypt(recipientId, plainText) {
   if (!plainText) return plainText
-  if (!canEncryptFor(recipientId)) return plainText
+  if (!canEncryptFor(recipientId)) {
+    // ещё раз попробуем подтянуть ключ с API
+    await prepareE2eeForPeer(recipientId)
+  }
+  if (!canEncryptFor(recipientId)) {
+    // нет ключа — уходим plaintext (лучше, чем терять сообщение)
+    return plainText
+  }
   try {
     return await encryptForPeer(recipientId, plainText)
   } catch (e) {
@@ -458,12 +443,6 @@ watch(
   animation: typing-fade 1.2s ease-in-out infinite;
 }
 
-.e2ee-status {
-  padding: 0 4px 2px 2px;
-  font-size: 11px;
-  font-weight: 500;
-  color: #16a34a;
-}
 
 @keyframes typing-fade {
   0%, 100% { opacity: .55; }
@@ -644,11 +623,6 @@ watch(
   margin-top: 2px;
 }
 
-.e2ee-lock {
-  font-size: 10px;
-  margin-right: 3px;
-  opacity: 0.85;
-}
 
 .btn-delete {
   opacity: 0;
@@ -715,8 +689,5 @@ watch(
     max-width: 92%;
   }
 
-  .e2ee-status {
-    display: none;
-  }
 }
 </style>

@@ -1,27 +1,28 @@
 /**
- * Клиентское E2EE (подобие сквозного шифрования) для ChickChirick.
+ * Клиентское E2EE для ChickChirick.
  *
- * Схема:
- *  - У каждого клиента ECDH P-256 identity keypair (private только в localStorage).
- *  - Публичные ключи собеседников кэшируются локально и обмениваются
- *    спец-сообщениями `__E2EE_KEY__:<spki-base64>`.
- *  - Текст шифруется AES-GCM; на сервере лежит только ciphertext с префиксом
- *    `🔒e2ee:v1:<base64(iv||ct)>`.
+ * Ключи:
+ *  - identity ECDH P-256 в localStorage
+ *  - публичные ключи собеседников: localStorage + REST /api/messages/e2ee/public-key
  *
- * Сервер НЕ имеет приватных ключей → не может прочитать переписку.
- * Это не Signal Protocol (нет ratchet / forward secrecy), но уже настоящее
- * client-side E2EE для 1:1 чатов.
+ * Сообщения:
+ *  - AES-GCM, префикс 🔒e2ee:v1:
+ *  - служебные __E2EE_KEY__: больше не шлём в ленту (бэк их игнорирует)
  */
 
 const STORAGE_PRIV = 'chickchirick_e2ee_priv_jwk'
 const STORAGE_PUB = 'chickchirick_e2ee_pub_spki'
 const PEER_PREFIX = 'chickchirick_e2ee_peer_'
+const MESSAGES_API = '/api/messages'
 
 export const E2EE_PREFIX = '🔒e2ee:v1:'
 export const KEY_ANNOUNCE_PREFIX = '__E2EE_KEY__:'
 
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
+
+/** peerId -> Promise (in-flight fetch) */
+const peerFetchInflight = new Map()
 
 function bufToB64(buf) {
   const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf
@@ -37,14 +38,10 @@ function b64ToBuf(b64) {
   return bytes.buffer
 }
 
-/** Есть ли Web Crypto */
 export function isCryptoAvailable() {
   return typeof crypto !== 'undefined' && !!crypto.subtle
 }
 
-/**
- * Гарантирует наличие identity keypair. Возвращает { publicKeySpkiB64 }.
- */
 export async function ensureIdentity() {
   if (!isCryptoAvailable()) throw new Error('Web Crypto API недоступен')
 
@@ -97,7 +94,6 @@ async function importPeerPublicKey(spkiB64) {
   )
 }
 
-/** Сохранить публичный ключ собеседника (messages-local id) */
 export function storePeerPublicKey(peerId, spkiB64) {
   if (!peerId || !spkiB64) return
   localStorage.setItem(PEER_PREFIX + String(peerId), spkiB64)
@@ -109,8 +105,61 @@ export function getPeerPublicKey(peerId) {
 }
 
 /**
- * ECDH → raw bits → HKDF → AES-GCM key
+ * Опубликовать свой публичный ключ на messages-сервис.
  */
+export async function publishMyPublicKey() {
+  const { publicKeySpkiB64 } = await ensureIdentity()
+  const res = await fetch(`${MESSAGES_API}/e2ee/public-key`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ publicKey: publicKeySpkiB64 })
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || `publish public key failed: ${res.status}`)
+  }
+  return publicKeySpkiB64
+}
+
+/**
+ * Загрузить публичный ключ собеседника (кэш → API).
+ * @returns {Promise<string|null>}
+ */
+export async function fetchPeerPublicKey(peerId) {
+  const id = Number(peerId)
+  if (!id) return null
+
+  const cached = getPeerPublicKey(id)
+  if (cached) return cached
+
+  if (peerFetchInflight.has(id)) {
+    return peerFetchInflight.get(id)
+  }
+
+  const p = (async () => {
+    try {
+      const res = await fetch(`${MESSAGES_API}/e2ee/public-key/${id}`, {
+        method: 'GET',
+        credentials: 'include'
+      })
+      if (!res.ok) return null
+      const data = await res.json().catch(() => ({}))
+      const key = (data.publicKey || data.public_key || '').trim()
+      if (key) storePeerPublicKey(id, key)
+      return key || null
+    } catch (e) {
+      console.warn('fetchPeerPublicKey:', e)
+      return null
+    } finally {
+      peerFetchInflight.delete(id)
+    }
+  })()
+
+  peerFetchInflight.set(id, p)
+  return p
+}
+
 async function deriveAesKey(peerSpkiB64) {
   const myPriv = await importMyPrivateKey()
   const peerPub = await importPeerPublicKey(peerSpkiB64)
@@ -143,14 +192,13 @@ async function deriveAesKey(peerSpkiB64) {
   )
 }
 
-/**
- * Шифрует plaintext для peerId.
- * @returns {Promise<string>} строка с префиксом E2EE_PREFIX
- */
 export async function encryptForPeer(peerId, plaintext) {
-  const peerPub = getPeerPublicKey(peerId)
+  let peerPub = getPeerPublicKey(peerId)
   if (!peerPub) {
-    throw new Error('Нет публичного ключа собеседника — сначала обменяйтесь ключами')
+    peerPub = await fetchPeerPublicKey(peerId)
+  }
+  if (!peerPub) {
+    throw new Error('Нет публичного ключа собеседника')
   }
 
   await ensureIdentity()
@@ -162,7 +210,6 @@ export async function encryptForPeer(peerId, plaintext) {
     textEncoder.encode(plaintext)
   )
 
-  // iv (12) || ciphertext+tag
   const combined = new Uint8Array(iv.length + ct.byteLength)
   combined.set(iv, 0)
   combined.set(new Uint8Array(ct), iv.length)
@@ -170,16 +217,14 @@ export async function encryptForPeer(peerId, plaintext) {
   return E2EE_PREFIX + bufToB64(combined)
 }
 
-/**
- * Расшифровывает сообщение от peerId (отправитель).
- * Если текст не зашифрован — возвращает как есть.
- * При ошибке расшифровки возвращает плейсхолдер.
- */
 export async function decryptFromPeer(peerId, text) {
   if (!text || typeof text !== 'string') return text || ''
   if (!text.startsWith(E2EE_PREFIX)) return text
 
-  const peerPub = getPeerPublicKey(peerId)
+  let peerPub = getPeerPublicKey(peerId)
+  if (!peerPub) {
+    peerPub = await fetchPeerPublicKey(peerId)
+  }
   if (!peerPub) {
     return '🔒 Зашифрованное сообщение (нет ключа собеседника)'
   }
@@ -221,16 +266,11 @@ export function parseKeyAnnounce(text) {
   return text.slice(KEY_ANNOUNCE_PREFIX.length).trim() || null
 }
 
-/** Текст спец-сообщения с нашим публичным ключом */
 export async function buildKeyAnnounceMessage() {
   const { publicKeySpkiB64 } = await ensureIdentity()
   return KEY_ANNOUNCE_PREFIX + publicKeySpkiB64
 }
 
-/**
- * Обработать входящее сообщение: если это анонс ключа — сохранить и вернуть null
- * (сообщение не показывать). Иначе вернуть текст (возможно ciphertext).
- */
 export function tryConsumeKeyAnnounce(senderId, text) {
   const key = parseKeyAnnounce(text)
   if (!key) return false
@@ -238,9 +278,27 @@ export function tryConsumeKeyAnnounce(senderId, text) {
   return true
 }
 
-/**
- * Есть ли у нас ключ собеседника и можем ли шифровать.
- */
 export function canEncryptFor(peerId) {
   return !!getPeerPublicKey(peerId) && isCryptoAvailable()
+}
+
+/**
+ * Подготовить E2EE к чату: identity + publish + fetch peer key.
+ * Не шлёт сообщения в ленту.
+ * @returns {Promise<boolean>} true если можно шифровать
+ */
+export async function prepareE2eeForPeer(peerId) {
+  try {
+    await ensureIdentity()
+    try {
+      await publishMyPublicKey()
+    } catch (e) {
+      console.warn('publishMyPublicKey:', e)
+    }
+    const key = await fetchPeerPublicKey(peerId)
+    return !!key
+  } catch (e) {
+    console.warn('prepareE2eeForPeer:', e)
+    return false
+  }
 }

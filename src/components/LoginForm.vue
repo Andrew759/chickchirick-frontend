@@ -1,7 +1,15 @@
 <template>
   <div class="login-container">
     <form @submit.prevent="handleSubmit" class="login-form">
-      <h2>Вход</h2>
+      <div class="login-brand">
+        <img
+          class="login-logo"
+          src="/favicon.png"
+          alt="ChickChirick"
+          width="120"
+          height="120"
+        />
+      </div>
 
       <div class="form-group">
         <label for="login">Логин или телефон</label>
@@ -94,6 +102,22 @@ defineExpose({
   background: #f0f2f5;
 }
 
+
+.login-brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.login-logo {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  display: block;
+  user-select: none;
+  pointer-events: none;
+}
+
 .login-form {
   background: white;
   padding: 30px;
@@ -182,6 +206,11 @@ input:focus {
 }
 
 @media (max-width: 768px) {
+  .login-logo {
+    width: 96px;
+    height: 96px;
+  }
+
   .login-container,
   .register-container {
     align-items: flex-start;
