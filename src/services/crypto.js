@@ -94,14 +94,52 @@ async function importPeerPublicKey(spkiB64) {
   )
 }
 
+/** JSON-массив известных публичных ключей собеседника (история, max 5). */
+const PEER_KEYS_PREFIX = 'chickchirick_e2ee_peerkeys_'
+
+function peerKeysKey(peerId) {
+  return PEER_KEYS_PREFIX + String(peerId)
+}
+
+/** Все известные ключи peer (новые первые). */
+export function getPeerPublicKeyList(peerId) {
+  if (!peerId) return []
+  const out = []
+  try {
+    const raw = localStorage.getItem(peerKeysKey(peerId))
+    if (raw) {
+      const arr = JSON.parse(raw)
+      if (Array.isArray(arr)) {
+        for (const k of arr) {
+          if (typeof k === 'string' && k && !out.includes(k)) out.push(k)
+        }
+      }
+    }
+  } catch (_) {}
+  const single = localStorage.getItem(PEER_PREFIX + String(peerId))
+  if (single && !out.includes(single)) out.push(single)
+  return out
+}
+
+/**
+ * Сохранить ключ собеседника.
+ * Старые ключи не выкидываем — иначе история перестаёт расшифровываться.
+ */
 export function storePeerPublicKey(peerId, spkiB64) {
   if (!peerId || !spkiB64) return
+  const list = getPeerPublicKeyList(peerId).filter((k) => k !== spkiB64)
+  list.unshift(spkiB64)
+  const trimmed = list.slice(0, 5)
+  localStorage.setItem(peerKeysKey(peerId), JSON.stringify(trimmed))
+  // «текущий» — для шифрования новых сообщений
   localStorage.setItem(PEER_PREFIX + String(peerId), spkiB64)
 }
 
+/** Актуальный ключ (для encrypt). */
 export function getPeerPublicKey(peerId) {
   if (!peerId) return null
-  return localStorage.getItem(PEER_PREFIX + String(peerId))
+  const list = getPeerPublicKeyList(peerId)
+  return list[0] || null
 }
 
 /**
@@ -116,8 +154,12 @@ export async function publishMyPublicKey() {
     body: JSON.stringify({ publicKey: publicKeySpkiB64 })
   })
   if (!res.ok) {
+    // 403/404 — бэкенд без роута или без колонки; не валим открытие чата
     const data = await res.json().catch(() => ({}))
-    throw new Error(data.error || `publish public key failed: ${res.status}`)
+    const err = new Error(data.error || `publish public key failed: ${res.status}`)
+    err.status = res.status
+    console.warn('publishMyPublicKey:', err.message)
+    throw err
   }
   return publicKeySpkiB64
 }
@@ -217,40 +259,44 @@ export async function encryptForPeer(peerId, plaintext) {
   return E2EE_PREFIX + bufToB64(combined)
 }
 
+async function tryDecryptWithPeerKey(peerSpkiB64, payloadB64) {
+  const combined = new Uint8Array(b64ToBuf(payloadB64))
+  if (combined.length < 13) return null
+  const iv = combined.slice(0, 12)
+  const ct = combined.slice(12)
+  const aesKey = await deriveAesKey(peerSpkiB64)
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, ct)
+  return textDecoder.decode(pt)
+}
+
 export async function decryptFromPeer(peerId, text) {
   if (!text || typeof text !== 'string') return text || ''
   if (!text.startsWith(E2EE_PREFIX)) return text
 
-  let peerPub = getPeerPublicKey(peerId)
-  if (!peerPub) {
-    peerPub = await fetchPeerPublicKey(peerId)
-  }
-  if (!peerPub) {
-    return '🔒 Зашифрованное сообщение (нет ключа собеседника)'
-  }
+  await ensureIdentity()
 
+  // Подтянуть ключ с API, не затирая историю локальных ключей
   try {
-    await ensureIdentity()
-    const payload = text.slice(E2EE_PREFIX.length)
-    const combined = new Uint8Array(b64ToBuf(payload))
-    if (combined.length < 13) {
-      return '🔒 Повреждённое зашифрованное сообщение'
-    }
+    await fetchPeerPublicKey(peerId)
+  } catch (_) {}
 
-    const iv = combined.slice(0, 12)
-    const ct = combined.slice(12)
-    const aesKey = await deriveAesKey(peerPub)
-
-    const pt = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      aesKey,
-      ct
-    )
-    return textDecoder.decode(pt)
-  } catch (e) {
-    console.warn('E2EE decrypt failed:', e)
-    return '🔒 Не удалось расшифровать'
+  const keys = getPeerPublicKeyList(peerId)
+  if (keys.length === 0) {
+    return 'Зашифрованное сообщение'
   }
+
+  const payload = text.slice(E2EE_PREFIX.length)
+  for (const peerPub of keys) {
+    try {
+      const plain = await tryDecryptWithPeerKey(peerPub, payload)
+      if (plain != null) return plain
+    } catch (_) {
+      // пробуем следующий известный ключ
+    }
+  }
+
+  // Свой identity сменился (новый браузер / очистка storage) — старые сообщения невосстановимы
+  return 'Зашифрованное сообщение'
 }
 
 export function isEncryptedText(text) {

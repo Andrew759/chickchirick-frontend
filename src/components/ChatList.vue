@@ -51,7 +51,7 @@
         :key="'chat-' + chat.id"
         class="chat"
         :class="{ active: chat.id === store.activeChatId }"
-        @click="store.setActiveChat(chat.id)"
+        @click.stop="onSelectChat(chat.id)"
       >
         <div
           class="avatar"
@@ -80,7 +80,7 @@
             </div>
           </div>
           <div class="last">
-            {{ lastMessage(chat)?.text || 'Нет сообщений' }}
+            {{ lastMessagePreview(chat) }}
           </div>
         </div>
       </div>
@@ -97,6 +97,11 @@ import PhotoViewer from './PhotoViewer.vue'
 import AvatarEqualizer from './AvatarEqualizer.vue'
 
 const store = useChatStore()
+
+function onSelectChat(id) {
+  if (id === store.activeChatId) return
+  store.setActiveChat(id)
+}
 const chats = computed(() => store.chats)
 const showSearch = ref(false)
 const viewerOpen = ref(false)
@@ -120,6 +125,16 @@ const profileLetter = computed(() => {
   }
   return 'Я'
 })
+
+function lastMessagePreview(chat) {
+  const msg = lastMessage(chat)
+  if (!msg) return 'Нет сообщений'
+  const text = (msg.text || '').trim()
+  if (!text) return 'Нет сообщений'
+  if (text.startsWith('🔒e2ee:v1:')) return 'Сообщение'
+  if (text === 'Зашифрованное сообщение' || text.startsWith('🔒')) return 'Сообщение'
+  return text
+}
 
 function lastMessage(chat) {
   return chat.messages?.at(-1) ?? null

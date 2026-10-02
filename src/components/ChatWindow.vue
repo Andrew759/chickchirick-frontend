@@ -25,94 +25,21 @@
     </div>
 
     <div class="messages" ref="messagesEl">
-      <div
-        v-for="msg in chat.messages"
-        :key="'msg-' + msg.id"
-        :class="['bubble', msg.fromMe ? 'me' : '']"
-      >
-        <div class="bubble-row">
-          <div class="content">
-            <!-- вложение -->
-            <div v-if="msg.fileUuid" class="attachment">
-              <button
-                v-if="msg.isImage"
-                type="button"
-                class="img-link"
-                @click.stop="openPhoto(msg)"
-              >
-                <img
-                  :src="fileUrl(msg.fileUuid)"
-                  :alt="msg.fileName || 'image'"
-                  class="msg-image"
-                  loading="lazy"
-                />
-              </button>
-              <VideoNotePlayer
-                v-else-if="msg.isVideoNote"
-                :src="fileUrl(msg.fileUuid)"
-                @click.stop
-              />
-              <button
-                v-else-if="msg.isVideo"
-                type="button"
-                class="video-link"
-                @click.stop="openVideo(msg)"
-              >
-                <video
-                  :src="fileUrl(msg.fileUuid)"
-                  class="msg-video-preview"
-                  muted
-                  preload="metadata"
-                  playsinline
-                />
-                <span class="video-play" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="24" height="24">
-                    <path fill="currentColor" d="M8 5v14l11-7z" />
-                  </svg>
-                </span>
-              </button>
-              <VoiceMessagePlayer
-                v-else-if="msg.isVoiceMessage"
-                :src="fileUrl(msg.fileUuid)"
-                :from-me="msg.fromMe"
-                :queue="voiceQueue"
-              />
-              <AudioPlayer
-                v-else-if="msg.isAudio"
-                :src="fileUrl(msg.fileUuid)"
-                :file-name="msg.fileName || 'audio'"
-                :from-me="msg.fromMe"
-              />
-              <a
-                v-else
-                :href="fileUrl(msg.fileUuid)"
-                :download="msg.fileName || 'file'"
-                target="_blank"
-                rel="noopener"
-                class="file-link"
-              >
-                📄 {{ msg.fileName || 'Файл' }}
-              </a>
-            </div>
-            <div v-if="msg.text" class="text">{{ msg.text }}</div>
-          </div>
-          <button
-            v-if="msg.fromMe"
-            type="button"
-            class="btn-delete"
-            title="Удалить сообщение"
-            @click.stop="handleDelete(msg)"
-          >
-            ×
-          </button>
-        </div>
-        <div class="time">{{ formatMessageTime(msg.createdAt) || '·' }}</div>
-      </div>
+      <MessageBubble
+        v-for="msg in visibleMessages"
+        :key="messageKey(msg)"
+        :msg="msg"
+        :queue="voiceQueue"
+        @open-photo="openPhoto"
+        @open-video="openVideo"
+        @delete="handleDelete"
+      />
     </div>
 
     <MessageInput @send="handleSend" @typing="handleTyping" />
 
     <PhotoViewer
+      v-if="viewerOpen"
       :open="viewerOpen"
       :items="viewerItems"
       :start-index="viewerIndex"
@@ -120,6 +47,7 @@
     />
 
     <VideoViewer
+      v-if="videoViewerOpen"
       :open="videoViewerOpen"
       :items="videoViewerItems"
       :start-index="videoViewerIndex"
@@ -130,7 +58,7 @@
 
 <script setup>
 import { computed, ref, watch, nextTick } from 'vue'
-import { useChatStore, formatMessageTime } from '../stores/chat'
+import { useChatStore } from '../stores/chat'
 import { sendMessage, sendTyping, requestDeleteMessage } from '../services/socket'
 import { uploadFile, linkFileToMessage, getFileUrl } from '../services/files'
 import { buildFileMessageText } from '../services/fileMarker'
@@ -141,14 +69,35 @@ import {
   getPeerPublicKey
 } from '../services/crypto' 
 import MessageInput from './MessageInput.vue'
+import MessageBubble from './MessageBubble.vue'
 import PhotoViewer from './PhotoViewer.vue'
 import VideoViewer from './VideoViewer.vue'
-import AudioPlayer from './AudioPlayer.vue'
-import VoiceMessagePlayer from './VoiceMessagePlayer.vue'
-import VideoNotePlayer from './VideoNotePlayer.vue'
 
 const store = useChatStore()
 const chat = computed(() => store.activeChat)
+
+const visibleMessages = computed(() => {
+  const list = chat.value?.messages || []
+  const seen = new Set()
+  const out = []
+  for (const m of list) {
+    const id = m?.id
+    if (id == null) {
+      out.push(m)
+      continue
+    }
+    if (seen.has(id)) continue
+    seen.add(id)
+    out.push(m)
+  }
+  return out
+})
+
+function messageKey(msg) {
+  const cid = chat.value?.id ?? 'x'
+  return String(cid) + '-' + String(msg?.id ?? 'x')
+}
+
 const voiceQueue = computed(() =>
   (chat.value?.messages || [])
     .filter((message) => message.isVoiceMessage && message.fileUuid)

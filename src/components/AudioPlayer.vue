@@ -51,7 +51,6 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { storeToRefs } from 'pinia'
 import { usePlayerStore } from '../stores/player'
 
 const props = defineProps({
@@ -61,7 +60,12 @@ const props = defineProps({
 })
 
 const player = usePlayerStore()
-const { playing, currentTime, duration, src: currentSrc } = storeToRefs(player)
+// Не используем storeToRefs: в Pinia 3.0.x он падает на null-полях стора
+// (`value.effect` у null) — компонент не монтируется и ломает unmount всего чата.
+const playing = computed(() => player.playing)
+const currentTime = computed(() => player.currentTime)
+const duration = computed(() => player.duration)
+const currentSrc = computed(() => player.src)
 const trackEl = ref(null)
 
 const isCurrent = computed(() => currentSrc.value === props.src)

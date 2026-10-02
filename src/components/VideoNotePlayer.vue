@@ -8,8 +8,8 @@
       playsinline
       @play="playing = true"
       @pause="playing = false"
-      @loadedmetadata="duration = videoEl.duration || 0"
-      @timeupdate="current = videoEl.currentTime || 0"
+      @loadedmetadata="onLoadedMetadata"
+      @timeupdate="onTimeUpdate"
       @ended="onEnded"
     />
     <span v-if="!playing" class="video-note-play" aria-hidden="true">
@@ -23,7 +23,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 
 const props = defineProps({ src: { type: String, required: true } })
 const videoEl = ref(null)
@@ -37,6 +37,18 @@ const durationLabel = computed(() => {
   return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`
 })
 
+function onLoadedMetadata(e) {
+  const el = e?.target
+  if (!el) return
+  duration.value = el.duration || 0
+}
+
+function onTimeUpdate(e) {
+  const el = e?.target
+  if (!el) return
+  current.value = el.currentTime || 0
+}
+
 function toggle() {
   const video = videoEl.value
   if (!video) return
@@ -48,6 +60,16 @@ function onEnded() {
   playing.value = false
   current.value = 0
 }
+
+onBeforeUnmount(() => {
+  const video = videoEl.value
+  if (!video) return
+  try {
+    video.pause()
+    video.removeAttribute('src')
+    video.load()
+  } catch (_) {}
+})
 </script>
 
 <style scoped>
