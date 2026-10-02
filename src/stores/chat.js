@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { nextTick } from 'vue'
 import { parseFileMessageText } from '../services/fileMarker'
 import { isImageFilename, isAudioFilename, isVideoFilename, isVoiceFilename } from '../services/files'
 import {
@@ -227,34 +228,35 @@ export const useChatStore = defineStore('chat', {
       this.currentView = view
     },
 
-    openMyProfile() {
+    async openMyProfile() {
       this.viewedProfile = null
-      this.myProfileOpen = true
       this.currentView = 'chats'
+      await nextTick()
+      this.myProfileOpen = true
     },
 
     closeMyProfile() {
       this.myProfileOpen = false
     },
 
-    openUserProfile(user) {
+    async openUserProfile(user) {
       if (!user || !user.id) return
       this.myProfileOpen = false
-      this.viewedProfile = { ...user }
       this.currentView = 'chats'
+      await nextTick()
+      this.viewedProfile = { ...user }
     },
 
     closeUserProfile() {
       this.viewedProfile = null
     },
 
-    setHistory(history) {
+    async setHistory(history) {
       this.myUserId = Number(history.userId)
-      this.chats = []
 
       const messages = history.messages || []
 
-      // 1) Сначала поднимаем все E2EE-ключи из истории (и старые __E2EE_KEY__ анонсы)
+      // 1) Ключи E2EE из истории (legacy __E2EE_KEY__ и кэш)
       for (const message of messages) {
         const rawText = message.text ?? message.Text ?? ''
         if (!isKeyAnnounce(rawText)) continue
@@ -264,30 +266,90 @@ export const useChatStore = defineStore('chat', {
         }
       }
 
-      // 2) Затем обычные сообщения (decrypt уже видит ключи)
+      // 2) Собираем чаты «офлайн», один раз пишем в state — меньше patch'ей Vue
+      const chatMap = new Map()
+
       for (const message of messages) {
-        this.upsertMessage(message)
+        const senderId = Number(message.senderId)
+        const recipientId = Number(message.recipientId)
+        const isMine = senderId === this.myUserId
+        const chatId = isMine ? recipientId : senderId
+        if (!chatId) continue
+
+        const rawText = message.text ?? message.Text ?? ''
+        if (isKeyAnnounce(rawText)) continue
+
+        if (!chatMap.has(chatId)) {
+          const known = this.usersById[chatId]
+          chatMap.set(chatId, {
+            id: chatId,
+            name: displayName(known) || 'Пользователь',
+            messages: []
+          })
+        }
+        const chat = chatMap.get(chatId)
+        if (message.id != null && chat.messages.some((m) => m.id === message.id)) continue
+
+        let extra = normalizeMessageFields(message)
+        const encrypted = isEncryptedText(rawText)
+        if (encrypted) {
+          const peerId = isMine ? recipientId : senderId
+          try {
+            const plain = await decryptFromPeer(peerId, rawText)
+            extra = normalizeMessageFields({ text: plain })
+          } catch (e) {
+            console.warn('decrypt in setHistory:', e)
+            extra = { ...extra, text: '' }
+          }
+        }
+
+        chat.messages.push({
+          id: message.id,
+          text: extra.text,
+          fileUuid: extra.fileUuid,
+          fileName: extra.fileName,
+          isImage: extra.isImage,
+          isAudio: extra.isAudio,
+          isVideo: extra.isVideo,
+          isVideoNote: extra.isVideoNote,
+          isVoiceMessage: extra.isVoiceMessage,
+          isEncrypted: encrypted,
+          fromMe: isMine,
+          senderId,
+          recipientId,
+          createdAt: normalizeCreatedAt(message.createdAt)
+        })
       }
 
-      // Финальная сортировка сообщений в каждом чате и порядка чатов
-      for (const chat of this.chats) {
+      const nextChats = Array.from(chatMap.values())
+      for (const chat of nextChats) {
         sortChatMessages(chat)
       }
-      sortChatsByLastMessage(this.chats)
+      sortChatsByLastMessage(nextChats)
 
-      // На десктопе сразу открываем первый чат; на мобилке оставляем список
-      if (this.activeChatId === null && this.chats.length > 0) {
+      this.chats = nextChats
+
+      // Откладываем смену activeChatId на следующий тик —
+      // чтобы Vue успел стабилизировать список чатов.
+      await nextTick()
+
+      if (this.activeChatId === null && nextChats.length > 0) {
         const isMobile =
           typeof window !== 'undefined' &&
           window.matchMedia &&
           window.matchMedia('(max-width: 768px)').matches
         if (!isMobile) {
-          this.activeChatId = this.chats[0].id
+          this.activeChatId = nextChats[0].id
         }
+      } else if (
+        this.activeChatId != null &&
+        !nextChats.some((c) => c.id === this.activeChatId)
+      ) {
+        this.activeChatId = null
       }
     },
 
-    upsertMessage(msg) {
+    async upsertMessage(msg) {
       const senderId = Number(msg.senderId)
       const recipientId = Number(msg.recipientId)
       const isMine = senderId === this.myUserId
@@ -297,7 +359,6 @@ export const useChatStore = defineStore('chat', {
 
       const rawText = msg.text ?? msg.Text ?? ''
 
-      // Спец-сообщение с публичным ключом — сохраняем ключ, в UI не показываем
       if (isKeyAnnounce(rawText)) {
         if (!isMine) {
           tryConsumeKeyAnnounce(senderId, rawText)
@@ -305,7 +366,7 @@ export const useChatStore = defineStore('chat', {
         return
       }
 
-      let chat = this.chats.find(c => c.id === chatId)
+      let chat = this.chats.find((c) => c.id === chatId)
 
       if (!chat) {
         const known = this.usersById[chatId]
@@ -318,14 +379,25 @@ export const useChatStore = defineStore('chat', {
         this.chats.push(chat)
       }
 
-      if (chat.messages.some(m => m.id === msg.id)) return
+      if (msg.id != null && chat.messages.some((m) => m.id === msg.id)) return
 
-      const extra = normalizeMessageFields(msg)
+      let extra = normalizeMessageFields(msg)
       const encrypted = isEncryptedText(rawText)
 
-      const entry = {
+      if (encrypted) {
+        const peerId = isMine ? recipientId : senderId
+        try {
+          const plain = await decryptFromPeer(peerId, rawText)
+          extra = normalizeMessageFields({ text: plain })
+        } catch (e) {
+          console.warn('decrypt in upsertMessage:', e)
+          extra = { ...extra, text: '' }
+        }
+      }
+
+      chat.messages.push({
         id: msg.id,
-        text: encrypted ? '…' : extra.text,
+        text: extra.text,
         fileUuid: extra.fileUuid,
         fileName: extra.fileName,
         isImage: extra.isImage,
@@ -338,34 +410,10 @@ export const useChatStore = defineStore('chat', {
         senderId,
         recipientId,
         createdAt: normalizeCreatedAt(msg.createdAt)
-      }
+      })
 
-      chat.messages.push(entry)
       sortChatMessages(chat)
       sortChatsByLastMessage(this.chats)
-
-      // Асинхронная расшифровка: ключ собеседника (для исходящих — peer = recipient)
-      if (encrypted) {
-        const peerId = isMine ? recipientId : senderId
-        decryptFromPeer(peerId, rawText).then((plain) => {
-          const c = this.chats.find((ch) => ch.id === chatId)
-          if (!c) return
-          const m = c.messages.find((x) => x.id === msg.id)
-          if (!m) return
-
-          // После расшифровки заново разбираем file-marker (если есть вложение)
-          const reparsed = normalizeMessageFields({ text: plain })
-          m.text = reparsed.text
-          m.fileUuid = reparsed.fileUuid
-          m.fileName = reparsed.fileName
-          m.isImage = reparsed.isImage
-          m.isAudio = reparsed.isAudio
-          m.isVideo = reparsed.isVideo
-          m.isVideoNote = reparsed.isVideoNote
-          m.isVoiceMessage = reparsed.isVoiceMessage
-          m.isEncrypted = true
-        })
-      }
     },
 
     setUserInfo(userId, user) {
@@ -407,7 +455,10 @@ export const useChatStore = defineStore('chat', {
     },
 
     setActiveChat(id) {
-      this.activeChatId = id
+      const next = id == null || id === '' ? null : Number(id)
+      if (Number.isNaN(next)) return
+      if (next === this.activeChatId) return
+      this.activeChatId = next
     },
 
     setTyping(userId, active) {

@@ -3,30 +3,38 @@
     v-if="store.isAuthenticated"
     class="app-shell"
     :class="{
-      'mobile-chat-open': !!store.activeChat,
+      'is-mobile': isMobile,
       'mobile-profile-open': store.myProfileOpen || !!store.viewedProfile
     }"
   >
     <div class="layout">
-      <ChatList class="panel-list" />
+      <!-- На мобилке список и чат не живут в DOM одновременно -->
+      <ChatList v-if="showChatList" class="panel-list" />
 
-      <div class="main-column panel-chat">
+      <div v-if="showChatColumn" class="main-column panel-chat">
         <MiniPlayer />
         <ChatWindow
           v-if="store.activeChat"
+          :key="'cw-' + store.activeChatId"
           @open-profile="store.openUserProfile"
-          @back="store.setActiveChat(null)"
+          @back="onBackToList"
         />
         <div v-else class="empty">Выберите чат</div>
       </div>
-      <UserProfile v-if="store.myProfileOpen" class="panel-profile" />
+    </div>
+
+    <!-- Профили вне layout — не участвуют в patch keyed children списка/чата -->
+    <Teleport to="body">
+      <UserProfile v-if="store.myProfileOpen" class="panel-profile profile-overlay" />
+    </Teleport>
+    <Teleport to="body">
       <PublicUserProfile
-        v-else-if="store.viewedProfile"
-        class="panel-profile"
+        v-if="store.viewedProfile"
+        class="panel-profile profile-overlay"
         :user="store.viewedProfile"
         @close="store.closeUserProfile"
       />
-    </div>
+    </Teleport>
   </div>
 
   <div v-else class="auth-wrapper">
@@ -45,7 +53,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { connectSocket, subscribe } from './services/socket'
 import {
   resolveChatUsers,
@@ -77,8 +85,28 @@ const MESSAGES_API_PREFIX = '/api/messages'
 
 const store = useChatStore()
 
+const isMobile = ref(false)
+function syncMobile() {
+  isMobile.value =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(max-width: 768px)').matches
+}
+const showChatList = computed(() => !isMobile.value || store.activeChatId == null)
+const showChatColumn = computed(() => !isMobile.value || store.activeChatId != null)
+
+function onBackToList() {
+  store.setActiveChat(null)
+}
+
+
 onMounted(async () => {
+  syncMobile()
+  window.addEventListener('resize', syncMobile)
   await checkAuth()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', syncMobile)
 })
 
 async function checkAuth() {
@@ -150,7 +178,7 @@ async function loadMessageHistory() {
   }
 
   const history = await response.json()
-  store.setHistory(history)
+  await store.setHistory(history)
 }
 
 /** Подтянуть имя + фамилию собеседников в список чатов */
@@ -305,6 +333,14 @@ function handleEvent(event) {
   padding: 24px;
   text-align: center;
 }
+.profile-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  box-shadow: -8px 0 32px rgba(15, 23, 42, .12);
+}
 .auth-wrapper {
   background: #f0f2f5;
   height: 100vh;
@@ -314,7 +350,7 @@ function handleEvent(event) {
   -webkit-overflow-scrolling: touch;
 }
 
-/* —— Mobile: один экран за раз (список / чат / профиль) —— */
+/* —— Mobile: один экран (v-if в шаблоне, без display:none) —— */
 @media (max-width: 768px) {
   .layout {
     display: block;
@@ -328,28 +364,16 @@ function handleEvent(event) {
   }
 
   .panel-chat {
-    display: none;
     position: absolute;
     inset: 0;
     z-index: 20;
     background: #eef8ff;
     width: 100%;
     height: 100%;
-  }
-
-  .app-shell.mobile-chat-open .panel-list {
-    display: none;
-  }
-
-  .app-shell.mobile-chat-open .panel-chat {
     display: flex;
+    flex-direction: column;
   }
 
-  .app-shell.mobile-chat-open .empty {
-    display: none;
-  }
-
-  /* Профиль поверх всего на весь экран */
   .panel-profile {
     position: fixed !important;
     inset: 0 !important;

@@ -1,6 +1,5 @@
 <template>
-  <Transition name="global-player">
-    <div v-if="player.hasTrack" class="global-player" :class="[player.kind === 'voice' ? 'is-voice' : 'is-music', { playing: player.playing }]">
+  <div v-if="player.hasTrack" class="global-player" :class="[player.kind === 'voice' ? 'is-voice' : 'is-music', { playing: player.playing }]">
       <div class="player-glow" aria-hidden="true"></div>
 
       <button
@@ -71,7 +70,6 @@
         </svg>
       </button>
     </div>
-  </Transition>
 </template>
 
 <script setup>

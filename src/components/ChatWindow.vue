@@ -27,7 +27,7 @@
     <div class="messages" ref="messagesEl">
       <div
         v-for="msg in chat.messages"
-        :key="msg.id"
+        :key="'msg-' + msg.id"
         :class="['bubble', msg.fromMe ? 'me' : '']"
       >
         <div class="bubble-row">

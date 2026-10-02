@@ -36,6 +36,7 @@
     <UserSearch v-if="showSearch" @close="showSearch = false" />
 
     <PhotoViewer
+      v-if="viewerOpen"
       :open="viewerOpen"
       :items="viewerItems"
       :start-index="0"
@@ -47,7 +48,7 @@
 
       <div
         v-for="chat in chats"
-        :key="chat.id"
+        :key="'chat-' + chat.id"
         class="chat"
         :class="{ active: chat.id === store.activeChatId }"
         @click="store.setActiveChat(chat.id)"
