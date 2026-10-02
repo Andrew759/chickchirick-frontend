@@ -327,24 +327,25 @@ export const useChatStore = defineStore('chat', {
       }
       sortChatsByLastMessage(nextChats)
 
-      const prevActive = this.activeChatId
-
-      // Снимаем активный чат → ChatWindow unmount, потом подменяем данные
-      this.activeChatId = null
-      await nextTick()
-
       this.chats = nextChats
+
+      // Откладываем смену activeChatId на следующий тик —
+      // чтобы Vue успел стабилизировать список чатов.
       await nextTick()
 
-      const isMobile =
-        typeof window !== 'undefined' &&
-        window.matchMedia &&
-        window.matchMedia('(max-width: 768px)').matches
-
-      if (prevActive != null && nextChats.some((c) => c.id === prevActive)) {
-        this.activeChatId = prevActive
-      } else if (!isMobile && nextChats.length > 0) {
-        this.activeChatId = nextChats[0].id
+      if (this.activeChatId === null && nextChats.length > 0) {
+        const isMobile =
+          typeof window !== 'undefined' &&
+          window.matchMedia &&
+          window.matchMedia('(max-width: 768px)').matches
+        if (!isMobile) {
+          this.activeChatId = nextChats[0].id
+        }
+      } else if (
+        this.activeChatId != null &&
+        !nextChats.some((c) => c.id === this.activeChatId)
+      ) {
+        this.activeChatId = null
       }
     },
 
@@ -453,15 +454,10 @@ export const useChatStore = defineStore('chat', {
       sortChatsByLastMessage(this.chats)
     },
 
-    async setActiveChat(id) {
+    setActiveChat(id) {
       const next = id == null || id === '' ? null : Number(id)
       if (Number.isNaN(next)) return
       if (next === this.activeChatId) return
-
-      // Полный unmount ChatWindow (v-if), затем mount —
-      // иначе Vue патчит v-for сообщений между разными чатами → instance null
-      this.activeChatId = null
-      await nextTick()
       this.activeChatId = next
     },
 

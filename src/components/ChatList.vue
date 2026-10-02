@@ -51,7 +51,7 @@
         :key="'chat-' + chat.id"
         class="chat"
         :class="{ active: chat.id === store.activeChatId }"
-        @click.stop="onSelectChat(chat.id)"
+        @click="store.setActiveChat(chat.id)"
       >
         <div
           class="avatar"
@@ -98,10 +98,6 @@ import AvatarEqualizer from './AvatarEqualizer.vue'
 
 const store = useChatStore()
 
-function onSelectChat(id) {
-  if (id === store.activeChatId) return
-  store.setActiveChat(id)
-}
 const chats = computed(() => store.chats)
 const showSearch = ref(false)
 const viewerOpen = ref(false)

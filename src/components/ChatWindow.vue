@@ -26,8 +26,8 @@
 
     <div class="messages" ref="messagesEl">
       <MessageBubble
-        v-for="msg in visibleMessages"
-        :key="messageKey(msg)"
+        v-for="msg in chat.messages"
+        :key="'msg-' + msg.id"
         :msg="msg"
         :queue="voiceQueue"
         @open-photo="openPhoto"
@@ -39,7 +39,6 @@
     <MessageInput @send="handleSend" @typing="handleTyping" />
 
     <PhotoViewer
-      v-if="viewerOpen"
       :open="viewerOpen"
       :items="viewerItems"
       :start-index="viewerIndex"
@@ -47,7 +46,6 @@
     />
 
     <VideoViewer
-      v-if="videoViewerOpen"
       :open="videoViewerOpen"
       :items="videoViewerItems"
       :start-index="videoViewerIndex"
@@ -76,27 +74,6 @@ import VideoViewer from './VideoViewer.vue'
 const store = useChatStore()
 const chat = computed(() => store.activeChat)
 
-const visibleMessages = computed(() => {
-  const list = chat.value?.messages || []
-  const seen = new Set()
-  const out = []
-  for (const m of list) {
-    const id = m?.id
-    if (id == null) {
-      out.push(m)
-      continue
-    }
-    if (seen.has(id)) continue
-    seen.add(id)
-    out.push(m)
-  }
-  return out
-})
-
-function messageKey(msg) {
-  const cid = chat.value?.id ?? 'x'
-  return String(cid) + '-' + String(msg?.id ?? 'x')
-}
 
 const voiceQueue = computed(() =>
   (chat.value?.messages || [])

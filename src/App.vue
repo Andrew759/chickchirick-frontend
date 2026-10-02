@@ -9,12 +9,13 @@
   >
     <div class="layout">
       <!-- На мобилке список и чат не живут в DOM одновременно -->
-      <ChatList v-show="showChatList" class="panel-list" />
+      <ChatList v-if="showChatList" class="panel-list" />
 
-      <div v-show="showChatColumn" class="main-column panel-chat">
+      <div v-if="showChatColumn" class="main-column panel-chat">
         <MiniPlayer />
         <ChatWindow
           v-if="store.activeChat"
+          :key="'cw-' + store.activeChatId"
           @open-profile="store.openUserProfile"
           @back="onBackToList"
         />
