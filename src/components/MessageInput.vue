@@ -150,6 +150,11 @@ async function send() {
 <style>
 .input-wrap {
   background: rgba(248, 252, 255, .96);
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  padding-bottom: env(safe-area-inset-bottom);
+  border-top: 1px solid rgba(42, 171, 238, .12);
 }
 
 .pending {
@@ -236,5 +241,34 @@ async function send() {
 
 .input > .btn-voice:hover {
   background: rgba(42, 171, 238, .1);
+}
+
+@media (max-width: 768px) {
+  .input {
+    padding: 8px 8px 10px;
+    gap: 2px;
+  }
+
+  .input > input[type='text'],
+  .input > input:not([type]) {
+    font-size: 16px; /* iOS: без авто-зума */
+    padding: 11px 14px;
+  }
+
+  .input > button:last-child,
+  .input > .btn-voice,
+  .btn-attach,
+  .btn-video-note {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .btn-video-note,
+  .btn-attach {
+    font-size: 20px;
+    padding: 6px;
+  }
 }
 </style>

@@ -262,8 +262,15 @@ export const useChatStore = defineStore('chat', {
       }
       sortChatsByLastMessage(this.chats)
 
+      // На десктопе сразу открываем первый чат; на мобилке оставляем список
       if (this.activeChatId === null && this.chats.length > 0) {
-        this.activeChatId = this.chats[0].id
+        const isMobile =
+          typeof window !== 'undefined' &&
+          window.matchMedia &&
+          window.matchMedia('(max-width: 768px)').matches
+        if (!isMobile) {
+          this.activeChatId = this.chats[0].id
+        }
       }
     },
 

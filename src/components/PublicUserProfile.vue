@@ -212,6 +212,21 @@ watch(
   height: 100%;
   overflow-y: auto;
   min-height: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+  .public-profile {
+    width: 100%;
+    flex: 1 1 auto;
+    border-left: none;
+    height: 100%;
+    height: 100dvh;
+  }
+
+  .profile-header {
+    padding-top: max(14px, env(safe-area-inset-top));
+  }
 }
 
 .profile-header {

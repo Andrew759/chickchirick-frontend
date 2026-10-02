@@ -546,7 +546,20 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+  .profile-container {
+    width: 100%;
+    border-right: none;
+  }
+
+  .profile-header {
+    padding-top: max(15px, env(safe-area-inset-top));
+  }
 }
 
 .profile-header {

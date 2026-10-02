@@ -260,4 +260,27 @@ async function selectUser(user) {
   color: #666;
   margin-top: 2px;
 }
+
+@media (max-width: 768px) {
+  .search-overlay {
+    padding-top: 0;
+    align-items: stretch;
+  }
+
+  .search-panel {
+    max-width: none;
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
+  }
+
+  .search-header {
+    padding-top: max(14px, env(safe-area-inset-top));
+  }
+
+  .search-input input,
+  input {
+    font-size: 16px;
+  }
+}
 </style>

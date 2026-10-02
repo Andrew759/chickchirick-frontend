@@ -90,6 +90,7 @@ defineExpose({
   align-items: center;
   width: 100%;
   height: 100vh;
+  height: 100dvh;
   background: #f0f2f5;
 }
 
@@ -178,5 +179,37 @@ input:focus {
 
 .link-btn:hover {
   text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .login-container,
+  .register-container {
+    align-items: flex-start;
+    padding: 24px 16px;
+    padding-top: max(24px, env(safe-area-inset-top));
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    box-sizing: border-box;
+  }
+
+  .login-form,
+  .register-form {
+    max-width: 100%;
+    padding: 24px 18px;
+    box-shadow: none;
+    border-radius: 12px;
+  }
+
+  input {
+    font-size: 16px; /* prevent iOS zoom */
+    padding: 12px;
+  }
+
+  .btn-submit {
+    padding: 14px;
+    font-size: 16px;
+    border-radius: 10px;
+  }
 }
 </style>

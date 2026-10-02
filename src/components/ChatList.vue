@@ -155,6 +155,7 @@ function openChatAvatar(chat) {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
 }
 
 /* —— Шапка —— */
@@ -163,6 +164,7 @@ function openChatAvatar(chat) {
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
+  padding-top: max(10px, env(safe-area-inset-top));
   background: #fff;
   border-bottom: 1px solid #f0f0f0;
   flex-shrink: 0;
@@ -399,5 +401,33 @@ function openChatAvatar(chat) {
   text-align: center;
   color: #8e8e93;
   font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100%;
+    border-right: none;
+  }
+
+  .chat {
+    padding: 12px 14px;
+    /* удобнее тапать */
+    min-height: 64px;
+  }
+
+  .chat:active {
+    background: #eef8ff;
+  }
+
+  .chat.active {
+    /* на мобилке список скрыт когда чат открыт — active не критичен */
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .avatar {
+    width: 52px;
+    height: 52px;
+  }
 }
 </style>

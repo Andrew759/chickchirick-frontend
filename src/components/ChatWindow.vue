@@ -1,6 +1,17 @@
 <template>
   <div class="chat-window">
     <div class="header">
+      <button
+        type="button"
+        class="btn-back-mobile"
+        title="Назад к чатам"
+        aria-label="Назад"
+        @click="emit('back')"
+      >
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <path fill="currentColor" d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+        </svg>
+      </button>
       <button type="button" class="chat-profile-trigger" @click="emit('open-profile', { id: chat.id, ...chatUser })">
         <span class="chat-profile-avatar">
           <img v-if="chatUser.avatarFileUuid" :src="getFileUrl(chatUser.avatarFileUuid)" alt="" />
@@ -155,7 +166,7 @@ const voiceQueue = computed(() =>
 const chatUser = computed(() => store.usersById[chat.value?.id] || {})
 const isPeerTyping = computed(() => Boolean(chat.value?.id && store.typingByChatId[chat.value.id]))
 const e2eeActive = computed(() => Boolean(chat.value?.id && canEncryptFor(chat.value.id)))
-const emit = defineEmits(['open-profile'])
+const emit = defineEmits(['open-profile', 'back'])
 const messagesEl = ref(null)
 
 const viewerOpen = ref(false)
@@ -351,14 +362,36 @@ watch(
 }
 
 .header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   padding: 6px 12px 8px;
+  padding-top: max(6px, env(safe-area-inset-top));
   background: rgba(248, 252, 255, .94);
   font-weight: 600;
   border-bottom: 1px solid rgba(42, 171, 238, .16);
   box-shadow: 0 2px 10px rgba(42, 171, 238, .06);
   backdrop-filter: blur(12px);
+  flex-shrink: 0;
 }
 
+.btn-back-mobile {
+  display: none;
+  border: none;
+  background: transparent;
+  color: #2aabee;
+  cursor: pointer;
+  padding: 6px 4px;
+  margin: 0 2px 0 -4px;
+  border-radius: 50%;
+  line-height: 0;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-back-mobile:active {
+  background: rgba(42, 171, 238, .12);
+}
 
 .chat-profile-trigger {
   display: flex;
@@ -366,12 +399,14 @@ watch(
   gap: 9px;
   width: fit-content;
   max-width: 100%;
+  min-width: 0;
   margin: 0;
   padding: 2px 4px;
   border: 0;
   background: transparent;
   cursor: pointer;
   border-radius: 9px;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .chat-profile-trigger:hover {
@@ -636,4 +671,52 @@ watch(
   color: #e11d48;
 }
 
+@media (max-width: 768px) {
+  .chat-window {
+    height: 100%;
+    max-height: 100%;
+  }
+
+  .btn-back-mobile {
+    display: grid;
+    place-items: center;
+  }
+
+  .header {
+    padding: 8px 10px;
+    padding-top: max(8px, env(safe-area-inset-top));
+  }
+
+  .chat-profile-trigger {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .messages {
+    padding: 12px 10px 96px;
+  }
+
+  .bubble {
+    max-width: 88%;
+  }
+
+  .msg-image {
+    max-width: min(100%, 280px);
+  }
+
+  /* На тач-устройствах кнопка удаления всегда чуть видна у своих */
+  .bubble.me .btn-delete {
+    opacity: 0.55;
+  }
+}
+
+@media (max-width: 380px) {
+  .bubble {
+    max-width: 92%;
+  }
+
+  .e2ee-status {
+    display: none;
+  }
+}
 </style>

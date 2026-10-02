@@ -1,19 +1,28 @@
 <template>
-  <div v-if="store.isAuthenticated" class="app-shell">
+  <div
+    v-if="store.isAuthenticated"
+    class="app-shell"
+    :class="{
+      'mobile-chat-open': !!store.activeChat,
+      'mobile-profile-open': store.myProfileOpen || !!store.viewedProfile
+    }"
+  >
     <div class="layout">
-      <ChatList />
+      <ChatList class="panel-list" />
 
-      <div class="main-column">
+      <div class="main-column panel-chat">
         <MiniPlayer />
         <ChatWindow
           v-if="store.activeChat"
           @open-profile="store.openUserProfile"
+          @back="store.setActiveChat(null)"
         />
         <div v-else class="empty">Выберите чат</div>
       </div>
-      <UserProfile v-if="store.myProfileOpen" />
+      <UserProfile v-if="store.myProfileOpen" class="panel-profile" />
       <PublicUserProfile
         v-else-if="store.viewedProfile"
+        class="panel-profile"
         :user="store.viewedProfile"
         @close="store.closeUserProfile"
       />
@@ -271,12 +280,14 @@ function handleEvent(event) {
 .app-shell {
   position: relative;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 .layout {
   display: flex;
-  height: 100vh;
+  height: 100%;
   background: #eef8ff;
+  position: relative;
 }
 .main-column {
   flex: 1;
@@ -292,16 +303,82 @@ function handleEvent(event) {
 }
 .main-column > .chat-window {
   min-height: 0;
+  flex: 1;
 }
 .empty {
   flex: 1;
   display: grid;
   place-items: center;
   color: gray;
+  padding: 24px;
+  text-align: center;
 }
 .auth-wrapper {
   background: #f0f2f5;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* —— Mobile: один экран за раз (список / чат / профиль) —— */
+@media (max-width: 768px) {
+  .layout {
+    display: block;
+  }
+
+  .panel-list {
+    width: 100% !important;
+    max-width: none !important;
+    height: 100%;
+    border-right: none !important;
+  }
+
+  .panel-chat {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    background: #eef8ff;
+    width: 100%;
+    height: 100%;
+  }
+
+  .app-shell.mobile-chat-open .panel-list {
+    display: none;
+  }
+
+  .app-shell.mobile-chat-open .panel-chat {
+    display: flex;
+  }
+
+  .app-shell.mobile-chat-open .empty {
+    display: none;
+  }
+
+  /* Профиль поверх всего на весь экран */
+  .panel-profile {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: 100% !important;
+    height: 100dvh !important;
+    z-index: 40 !important;
+    border-right: none !important;
+    box-shadow: none !important;
+  }
+
+  .main-column > .global-player {
+    margin: 6px 8px 0;
+  }
+}
+
+/* Чуть уже планшет: список компактнее */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .panel-list {
+    width: 280px !important;
+  }
 }
 </style>
