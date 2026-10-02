@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { parseFileMessageText } from '../services/fileMarker'
 import { isImageFilename, isAudioFilename, isVideoFilename, isVoiceFilename } from '../services/files'
+import {
+  tryConsumeKeyAnnounce,
+  decryptFromPeer,
+  isEncryptedText,
+  isKeyAnnounce
+} from '../services/crypto'
 
 /**
  * Приводим createdAt к ISO-строке.
@@ -269,6 +275,16 @@ export const useChatStore = defineStore('chat', {
 
       if (!chatId) return
 
+      const rawText = msg.text ?? msg.Text ?? ''
+
+      // Спец-сообщение с публичным ключом — сохраняем ключ, в UI не показываем
+      if (isKeyAnnounce(rawText)) {
+        if (!isMine) {
+          tryConsumeKeyAnnounce(senderId, rawText)
+        }
+        return
+      }
+
       let chat = this.chats.find(c => c.id === chatId)
 
       if (!chat) {
@@ -285,10 +301,11 @@ export const useChatStore = defineStore('chat', {
       if (chat.messages.some(m => m.id === msg.id)) return
 
       const extra = normalizeMessageFields(msg)
+      const encrypted = isEncryptedText(rawText)
 
-      chat.messages.push({
+      const entry = {
         id: msg.id,
-        text: extra.text,
+        text: encrypted ? (isMine ? '🔒 …' : '🔒 Расшифровка…') : extra.text,
         fileUuid: extra.fileUuid,
         fileName: extra.fileName,
         isImage: extra.isImage,
@@ -296,14 +313,39 @@ export const useChatStore = defineStore('chat', {
         isVideo: extra.isVideo,
         isVideoNote: extra.isVideoNote,
         isVoiceMessage: extra.isVoiceMessage,
+        isEncrypted: encrypted,
         fromMe: isMine,
         senderId,
         recipientId,
         createdAt: normalizeCreatedAt(msg.createdAt)
-      })
+      }
 
+      chat.messages.push(entry)
       sortChatMessages(chat)
       sortChatsByLastMessage(this.chats)
+
+      // Асинхронная расшифровка: ключ собеседника (для исходящих — peer = recipient)
+      if (encrypted) {
+        const peerId = isMine ? recipientId : senderId
+        decryptFromPeer(peerId, rawText).then((plain) => {
+          const c = this.chats.find((ch) => ch.id === chatId)
+          if (!c) return
+          const m = c.messages.find((x) => x.id === msg.id)
+          if (!m) return
+
+          // После расшифровки заново разбираем file-marker (если есть вложение)
+          const reparsed = normalizeMessageFields({ text: plain })
+          m.text = reparsed.text
+          m.fileUuid = reparsed.fileUuid
+          m.fileName = reparsed.fileName
+          m.isImage = reparsed.isImage
+          m.isAudio = reparsed.isAudio
+          m.isVideo = reparsed.isVideo
+          m.isVideoNote = reparsed.isVideoNote
+          m.isVoiceMessage = reparsed.isVoiceMessage
+          m.isEncrypted = true
+        })
+      }
     },
 
     setUserInfo(userId, user) {

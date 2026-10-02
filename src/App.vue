@@ -37,13 +37,20 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
-import { connectSocket, subscribe } from './services/socket'
+import { connectSocket, subscribe, sendMessage } from './services/socket'
 import {
   resolveChatUsers,
   fetchUserByUuid,
   fetchUserAvatarFileUuid
 } from './services/users'
 import { useChatStore } from './stores/chat'
+import {
+  ensureIdentity,
+  isKeyAnnounce,
+  tryConsumeKeyAnnounce,
+  buildKeyAnnounceMessage,
+  getPeerPublicKey
+} from './services/crypto'
 
 import ChatList from './components/ChatList.vue'
 import UserProfile from './components/UserProfile.vue'
@@ -152,6 +159,8 @@ async function loadChatNames() {
 function initChatSession(token) {
   connectSocket(token)
   subscribe(handleEvent)
+  // Генерируем / поднимаем identity keypair при входе в сессию
+  ensureIdentity().catch((e) => console.warn('E2EE ensureIdentity:', e))
 }
 
 
@@ -224,11 +233,29 @@ async function handleRegisterSuccess(userData) {
 
 function handleEvent(event) {
   if (event.message) {
-    store.upsertMessage(event.message)
-    // если появился новый чат без имени — догрузим
     const sid = Number(event.message.senderId)
     const rid = Number(event.message.recipientId)
-    const peerId = sid === store.myUserId ? rid : sid
+    const text = event.message.text || ''
+    const isMine = sid === store.myUserId
+    const peerId = isMine ? rid : sid
+
+    // Входящий анонс ключа: сохраняем; если ключа раньше не было — отвечаем своим
+    if (!isMine && isKeyAnnounce(text)) {
+      const hadKey = !!getPeerPublicKey(sid)
+      tryConsumeKeyAnnounce(sid, text)
+      if (!hadKey) {
+        buildKeyAnnounceMessage()
+          .then((announce) => {
+            sendMessage({ recipientId: sid, text: announce })
+          })
+          .catch((e) => console.warn('E2EE reply announce failed:', e))
+      }
+      store.upsertMessage(event.message)
+      return
+    }
+
+    store.upsertMessage(event.message)
+    // если появился новый чат без имени — догрузим
     if (peerId && !store.usersById[peerId]) {
       loadChatNames()
     }

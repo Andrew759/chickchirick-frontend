@@ -9,6 +9,7 @@
         <span class="chat-title">
           <span class="chat-name">{{ chat.name }}</span>
           <span v-if="isPeerTyping" class="typing-status">печатает...</span>
+          <span v-else-if="e2eeActive" class="e2ee-status" title="Сообщения шифруются на устройстве">🔒 E2EE</span>
         </span>
       </button>
     </div>
@@ -95,7 +96,10 @@
             ×
           </button>
         </div>
-        <div class="time">{{ formatMessageTime(msg.createdAt) || '·' }}</div>
+        <div class="time">
+          <span v-if="msg.isEncrypted" class="e2ee-lock" title="Сквозное шифрование">🔒</span>
+          {{ formatMessageTime(msg.createdAt) || '·' }}
+        </div>
       </div>
     </div>
 
@@ -123,6 +127,13 @@ import { useChatStore, formatMessageTime } from '../stores/chat'
 import { sendMessage, sendTyping, requestDeleteMessage } from '../services/socket'
 import { uploadFile, linkFileToMessage, getFileUrl } from '../services/files'
 import { buildFileMessageText } from '../services/fileMarker'
+import {
+  ensureIdentity,
+  canEncryptFor,
+  encryptForPeer,
+  buildKeyAnnounceMessage,
+  getPeerPublicKey
+} from '../services/crypto'
 import MessageInput from './MessageInput.vue'
 import PhotoViewer from './PhotoViewer.vue'
 import VideoViewer from './VideoViewer.vue'
@@ -143,6 +154,7 @@ const voiceQueue = computed(() =>
 )
 const chatUser = computed(() => store.usersById[chat.value?.id] || {})
 const isPeerTyping = computed(() => Boolean(chat.value?.id && store.typingByChatId[chat.value.id]))
+const e2eeActive = computed(() => Boolean(chat.value?.id && canEncryptFor(chat.value.id)))
 const emit = defineEmits(['open-profile'])
 const messagesEl = ref(null)
 
@@ -201,6 +213,45 @@ function handleTyping(active) {
   sendTyping(recipientId, active)
 }
 
+/**
+ * Перед отправкой: убедиться, что у нас есть identity и (по возможности)
+ * публичный ключ собеседника. Если ключа нет — шлём анонс своего ключа.
+ */
+async function ensureE2eeReady(recipientId) {
+  try {
+    await ensureIdentity()
+  } catch (e) {
+    console.warn('E2EE identity:', e)
+    return false
+  }
+
+  if (!getPeerPublicKey(recipientId)) {
+    // Анонсируем свой ключ — собеседник сохранит и ответит своим
+    try {
+      const announce = await buildKeyAnnounceMessage()
+      sendMessage({ recipientId, text: announce })
+    } catch (e) {
+      console.warn('E2EE key announce failed:', e)
+    }
+    return false
+  }
+  return true
+}
+
+/**
+ * Шифрует текст, если возможно; иначе отправляет plaintext.
+ */
+async function maybeEncrypt(recipientId, plainText) {
+  if (!plainText) return plainText
+  if (!canEncryptFor(recipientId)) return plainText
+  try {
+    return await encryptForPeer(recipientId, plainText)
+  } catch (e) {
+    console.warn('E2EE encrypt failed, sending plaintext:', e)
+    return plainText
+  }
+}
+
 async function handleSend(payload) {
   const caption = (payload?.text || '').trim()
   const file = payload?.file || null
@@ -208,8 +259,11 @@ async function handleSend(payload) {
   if (!recipientId) return
   if (!caption && !file) return
 
+  await ensureE2eeReady(recipientId)
+
   if (!file) {
-    sendMessage({ recipientId, text: caption })
+    const text = await maybeEncrypt(recipientId, caption)
+    sendMessage({ recipientId, text })
     return
   }
 
@@ -223,12 +277,12 @@ async function handleSend(payload) {
     return
   }
 
-  // 2) текст с маркером → WS (история/realtime без правок proto)
-  const text = buildFileMessageText(fileUuid, file.name, caption)
+  // 2) текст с маркером → шифруем целиком (caption + file marker)
+  const plain = buildFileMessageText(fileUuid, file.name, caption)
+  const text = await maybeEncrypt(recipientId, plain)
   sendMessage({ recipientId, text })
 
   // 3) после появления сообщения в store — привязка file_uuid в messages
-  // (оптимистично: слушаем ближайшее своё сообщение с этим маркером)
   waitAndLinkFile(fileUuid)
 }
 
@@ -273,6 +327,15 @@ watch(
       messagesEl.value.scrollTop = messagesEl.value.scrollHeight
     }
   }
+)
+
+// При открытии чата — инициируем обмен ключами, если ещё нет ключа собеседника
+watch(
+  () => chat.value?.id,
+  (id) => {
+    if (id) ensureE2eeReady(id)
+  },
+  { immediate: true }
 )
 </script>
 
@@ -358,6 +421,13 @@ watch(
   font-weight: 500;
   color: #2aabee;
   animation: typing-fade 1.2s ease-in-out infinite;
+}
+
+.e2ee-status {
+  padding: 0 4px 2px 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #16a34a;
 }
 
 @keyframes typing-fade {
@@ -537,6 +607,12 @@ watch(
   color: #6d8796;
   text-align: right;
   margin-top: 2px;
+}
+
+.e2ee-lock {
+  font-size: 10px;
+  margin-right: 3px;
+  opacity: 0.85;
 }
 
 .btn-delete {
