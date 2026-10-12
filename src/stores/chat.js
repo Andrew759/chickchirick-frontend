@@ -4,9 +4,9 @@ import { parseFileMessageText } from '../services/fileMarker'
 import { isImageFilename, isAudioFilename, isVideoFilename, isVoiceFilename } from '../services/files'
 import {
   tryConsumeKeyAnnounce,
-  decryptFromPeer,
   isEncryptedText,
-  isKeyAnnounce
+  isKeyAnnounce,
+  resolveE2eeDisplayText
 } from '../services/crypto'
 
 /**
@@ -292,14 +292,14 @@ export const useChatStore = defineStore('chat', {
 
         let extra = normalizeMessageFields(message)
         const encrypted = isEncryptedText(rawText)
-        if (encrypted) {
+        if (encrypted || (typeof rawText === 'string' && /^e2ee:v\d+:/i.test(rawText.trim()))) {
           const peerId = isMine ? recipientId : senderId
           try {
-            const plain = await decryptFromPeer(peerId, rawText)
+            const plain = await resolveE2eeDisplayText(peerId, rawText)
             extra = normalizeMessageFields({ text: plain })
           } catch (e) {
             console.warn('decrypt in setHistory:', e)
-            extra = { ...extra, text: '' }
+            extra = { ...extra, text: 'Зашифрованное сообщение' }
           }
         }
 
@@ -382,16 +382,16 @@ export const useChatStore = defineStore('chat', {
       if (msg.id != null && chat.messages.some((m) => m.id === msg.id)) return
 
       let extra = normalizeMessageFields(msg)
-      const encrypted = isEncryptedText(rawText)
+      const encrypted = isEncryptedText(rawText) || (typeof rawText === 'string' && /^e2ee:v\d+:/i.test(rawText.trim()))
 
       if (encrypted) {
         const peerId = isMine ? recipientId : senderId
         try {
-          const plain = await decryptFromPeer(peerId, rawText)
+          const plain = await resolveE2eeDisplayText(peerId, rawText)
           extra = normalizeMessageFields({ text: plain })
         } catch (e) {
           console.warn('decrypt in upsertMessage:', e)
-          extra = { ...extra, text: '' }
+          extra = { ...extra, text: 'Зашифрованное сообщение' }
         }
       }
 

@@ -78,10 +78,19 @@ export async function fetchUsersByUuids(uuids) {
  */
 function extractPhotoFileUuid(photo) {
   if (!photo) return null
-  const raw = photo.file_uuid || photo.FileUuid || photo.fileUuid || null
-  const uuid = raw && typeof raw === 'object' ? (raw.String || raw.string || null) : raw
+  const raw =
+    photo.file_uuid ||
+    photo.FileUuid ||
+    photo.fileUuid ||
+    photo.file_UUID ||
+    photo.FileUUID ||
+    null
+  let uuid = raw
+  if (raw && typeof raw === 'object') {
+    uuid = raw.String || raw.string || raw.UUID || raw.uuid || raw.Value || raw.value || null
+  }
   if (!uuid || String(uuid) === '00000000-0000-0000-0000-000000000000') return null
-  return String(uuid)
+  return String(uuid).trim()
 }
 
 /**
@@ -99,27 +108,66 @@ export async function fetchUserMedia(userServiceId) {
       method: 'GET',
       credentials: 'include'
     })
-    if (!res.ok) return []
+    if (!res.ok) {
+      console.warn('fetchUserMedia: photos API', res.status)
+      return []
+    }
     const data = await safeJson(res)
-    const list = Array.isArray(data?.payload) ? data.payload : Array.isArray(data) ? data : []
+    const list = Array.isArray(data?.payload)
+      ? data.payload
+      : Array.isArray(data?.Payload)
+        ? data.Payload
+        : Array.isArray(data)
+          ? data
+          : []
 
     const base = list
       .map((p) => ({
-        id: Number(p.id) || 0,
-        fileUuid: extractPhotoFileUuid(p)
+        id: Number(p.id ?? p.Id) || 0,
+        fileUuid: extractPhotoFileUuid(p),
+        apiKind: String(p.media_kind || p.MediaKind || p.mediaKind || '').toLowerCase()
       }))
       .filter((p) => p.fileUuid)
       .sort((a, b) => (b.id || 0) - (a.id || 0))
 
-    // параллельно узнаём тип каждого файла
+    // Тип файла: files-сервис → localStorage → fallback по расширению
+    const localMap = (() => {
+      try {
+        return JSON.parse(localStorage.getItem('cc_media_meta') || '{}')
+      } catch {
+        return {}
+      }
+    })()
+
     const enriched = await Promise.all(
       base.map(async (item) => {
-        const meta = await probeFileMeta(item.fileUuid)
-        const kind = detectMediaKind(meta)
+        const local = localMap[item.fileUuid] || {}
+        let contentType = ''
+        let fileName = local.fileName || ''
+        try {
+          const meta = await probeFileMeta(item.fileUuid)
+          contentType = meta.contentType || ''
+          fileName = meta.fileName || fileName || ''
+        } catch (e) {
+          console.warn('probeFileMeta failed', item.fileUuid, e)
+        }
+        let kind = 'file'
+        // 1) из БД (media_kind)
+        if (item.apiKind === 'image' || item.apiKind === 'audio' || item.apiKind === 'video') {
+          kind = item.apiKind
+        } else {
+          // 2) probe files-сервиса
+          kind = detectMediaKind({ fileName, contentType })
+          // 3) localStorage
+          if (kind === 'file' && local.kind && local.kind !== 'file') {
+            kind = local.kind
+          }
+        }
         return {
-          ...item,
+          id: item.id,
+          fileUuid: item.fileUuid,
           kind,
-          fileName: meta.fileName || ''
+          fileName: fileName || local.fileName || ''
         }
       })
     )
@@ -174,10 +222,11 @@ export async function deleteUserPhoto(photoId) {
  * @param {number} userServiceId
  * @param {string} fileUuid
  */
-export async function createUserPhoto(userServiceId, fileUuid) {
+export async function createUserPhoto(userServiceId, fileUuid, mediaKind = 'image') {
   const id = Number(userServiceId)
   if (!id || !fileUuid) throw new Error('userServiceId and fileUuid are required')
 
+  const kind = (mediaKind || 'image').toLowerCase()
   const res = await fetch(`${USER_API}/photo`, {
     method: 'POST',
     credentials: 'include',
@@ -185,7 +234,9 @@ export async function createUserPhoto(userServiceId, fileUuid) {
     body: JSON.stringify({
       file_uuid: fileUuid,
       FileUuid: fileUuid,
-      user_id: id
+      user_id: id,
+      media_kind: kind,
+      MediaKind: kind
     })
   })
 

@@ -1,28 +1,21 @@
 let socket = null
 let listeners = []
 let reconnectTimer = null
-let currentToken = null
 
 /**
- * Подключение к WebSocket.
- * @param {string} [token] — access_token (передаётся в query, т.к. cookie с другого origin часто не уходит)
+ * Подключение к WebSocket messages-сервиса.
+ * Авторизация — cookie access_token (браузер шлёт на localhost:* сам).
+ * Подключаемся напрямую на :8085, минуя Vite-прокси (upgrade через proxy часто ломается).
  */
-export function connectSocket(token) {
-    if (token) {
-        currentToken = token
-    }
-
+export function connectSocket() {
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
         return
     }
 
-    const params = new URLSearchParams()
-    if (currentToken && currentToken !== 'cookie-session') {
-        params.set('token', currentToken)
-    }
-
-    const qs = params.toString()
-    const url = qs ? `ws://localhost:83/ws?${qs}` : 'ws://localhost:83/ws'
+    // Важно: hostname = "localhost", не "127.0.0.1"
+    // Cookie выставляется на host localhost и не уходит на 127.0.0.1
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const url = `${protocol}//localhost:8085/ws`
 
     socket = new WebSocket(url)
 
@@ -47,8 +40,8 @@ export function connectSocket(token) {
         console.error('WS error:', err)
     }
 
-    socket.onclose = () => {
-        console.log('WS disconnected')
+    socket.onclose = (event) => {
+        console.log('WS disconnected', event.code, event.reason || '')
         socket = null
         if (!reconnectTimer) {
             reconnectTimer = setTimeout(() => {
@@ -97,7 +90,6 @@ export function disconnectSocket() {
 
 /**
  * Запрос на удаление сообщения через REST messages-сервиса.
- * Сервер шлёт deletedMessageId участникам через Redis → WS.
  * @param {number|string} messageId
  * @returns {Promise<boolean>}
  */
@@ -120,4 +112,3 @@ export async function requestDeleteMessage(messageId) {
     }
     return true
 }
-

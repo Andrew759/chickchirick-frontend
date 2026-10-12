@@ -120,8 +120,8 @@ async function checkAuth() {
       const result = await response.json().catch(() => ({}))
       store.setAuthenticated(true)
 
-      const socketToken = result.accessToken || result.access_token || result.payload?.accessToken || null
-      initChatSession(socketToken)
+      // WS авторизуется cookie access_token (same-origin через Vite)
+      initChatSession()
 
       await loadMessageHistory()
       await Promise.all([loadChatNames(), loadMyProfileAvatar(result)])
@@ -192,8 +192,8 @@ async function loadChatNames() {
   }
 }
 
-function initChatSession(token) {
-  connectSocket(token)
+function initChatSession() {
+  connectSocket()
   subscribe(handleEvent)
   // Identity + публикация публичного ключа на messages API (не в ленту)
   ensureIdentity()
@@ -229,8 +229,8 @@ async function handleLoginSuccess(credentials) {
     await loadMessageHistory()
     await Promise.all([loadChatNames(), loadMyProfileAvatar(result)])
 
-    const socketToken = result.accessToken || result.access_token || result.payload?.accessToken || null
-    initChatSession(socketToken)
+    // WS авторизуется cookie access_token
+    initChatSession()
   } catch (error) {
     console.error('Ошибка входа:', error.message)
     if (loginFormRef.value) {
@@ -261,8 +261,8 @@ async function handleRegisterSuccess(userData) {
     await loadMessageHistory()
     await Promise.all([loadChatNames(), loadMyProfileAvatar(result)])
 
-    const socketToken = result.accessToken || result.access_token || result.payload?.accessToken || null
-    initChatSession(socketToken)
+    // WS авторизуется cookie access_token
+    initChatSession()
   } catch (error) {
     console.error('Ошибка регистрации на бэкенде:', error.message)
     alert(`Не удалось завершить регистрацию: ${error.message}`)

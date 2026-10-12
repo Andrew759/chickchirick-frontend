@@ -1,31 +1,42 @@
 /**
- * Клиентское E2EE для ChickChirick.
+ * ChickChirick E2EE v3 — ephemeral ECDH + AES-256-GCM + plaintext cache.
  *
- * Ключи:
- *  - identity ECDH P-256 в localStorage
- *  - публичные ключи собеседников: localStorage + REST /api/messages/e2ee/public-key
- *
- * Сообщения:
- *  - AES-GCM, префикс 🔒e2ee:v1:
- *  - служебные __E2EE_KEY__: больше не шлём в ленту (бэк их игнорирует)
+ * encrypt: EK ephemeral, shared=ECDH(EK, peerIK), AES-GCM → 🔒e2ee:v3:...
+ * decrypt in: ECDH(myIK, EK_pub)
+ * decrypt own: localStorage plaintext cache (как локальная БД в Signal)
  */
 
-const STORAGE_PRIV = 'chickchirick_e2ee_priv_jwk'
-const STORAGE_PUB = 'chickchirick_e2ee_pub_spki'
-const PEER_PREFIX = 'chickchirick_e2ee_peer_'
 const MESSAGES_API = '/api/messages'
-
-export const E2EE_PREFIX = '🔒e2ee:v1:'
+export const E2EE_PREFIX = 'e2ee:v1:'
+export const E2EE_PREFIX_V2 = 'e2ee:v2:'
+export const E2EE_PREFIX_V3 = 'e2ee:v3:'
+// legacy (эмодзи мог обрезаться в БД/протоколе)
+const E2EE_PREFIX_LEGACY = '🔒e2ee:v1:'
+const E2EE_PREFIX_V2_LEGACY = '🔒e2ee:v2:'
+const E2EE_PREFIX_V3_LEGACY = '🔒e2ee:v3:'
 export const KEY_ANNOUNCE_PREFIX = '__E2EE_KEY__:'
+
+const LS_IK_PRIV = 'cc_e2ee_ik_priv_jwk'
+const LS_IK_PUB = 'cc_e2ee_ik_pub_spki'
+const LS_IK_SIGN_PRIV = 'cc_e2ee_ik_sign_priv_jwk'
+const LS_IK_SIGN_PUB = 'cc_e2ee_ik_sign_pub_spki'
+const LS_SPK_PRIV = 'cc_e2ee_spk_priv_jwk'
+const LS_SPK_PUB = 'cc_e2ee_spk_pub_spki'
+const LS_SPK_ID = 'cc_e2ee_spk_id'
+const LS_SPK_SIG = 'cc_e2ee_spk_sig'
+const LS_OPK = 'cc_e2ee_opk_map'
+const LS_OPK_PUB = 'cc_e2ee_opk_pub_map'
+const LS_PEER_KEYS = 'cc_e2ee_peer_keys'
+const LS_PLAIN_CACHE = 'cc_e2ee_plain_cache'
 
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
-
-/** peerId -> Promise (in-flight fetch) */
 const peerFetchInflight = new Map()
+const OPK_TARGET = 20
+const PLAIN_CACHE_MAX = 500
 
 function bufToB64(buf) {
-  const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf
+  const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : new Uint8Array(buf)
   let s = ''
   for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i])
   return btoa(s)
@@ -38,156 +49,243 @@ function b64ToBuf(b64) {
   return bytes.buffer
 }
 
+function b64ToBytes(b64) {
+  return new Uint8Array(b64ToBuf(b64))
+}
+
+function concatBytes(...parts) {
+  const total = parts.reduce((n, p) => n + p.length, 0)
+  const out = new Uint8Array(total)
+  let o = 0
+  for (const p of parts) {
+    out.set(p, o)
+    o += p.length
+  }
+  return out
+}
+
 export function isCryptoAvailable() {
   return typeof crypto !== 'undefined' && !!crypto.subtle
+}
+
+async function hkdf(ikm, salt, info, length = 32) {
+  const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits'])
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: salt instanceof Uint8Array ? salt : new Uint8Array(salt),
+      info: typeof info === 'string' ? textEncoder.encode(info) : info
+    },
+    key,
+    length * 8
+  )
+  return new Uint8Array(bits)
+}
+
+async function ecdh(privKey, pubKey) {
+  const bits = await crypto.subtle.deriveBits({ name: 'ECDH', public: pubKey }, privKey, 256)
+  return new Uint8Array(bits)
+}
+
+async function importEcdhPriv(jwk) {
+  return crypto.subtle.importKey('jwk', jwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits'])
+}
+
+async function importEcdhPub(spkiB64) {
+  return crypto.subtle.importKey('spki', b64ToBuf(spkiB64), { name: 'ECDH', namedCurve: 'P-256' }, true, [])
+}
+
+async function generateEcdhPair() {
+  return crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'])
+}
+
+async function generateEcdsaPair() {
+  return crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify'])
+}
+
+async function exportSpkiB64(pub) {
+  return bufToB64(await crypto.subtle.exportKey('spki', pub))
+}
+
+async function exportJwk(priv) {
+  return crypto.subtle.exportKey('jwk', priv)
+}
+
+async function aesGcmEncrypt(messageKey, plaintext) {
+  const key = await crypto.subtle.importKey('raw', messageKey, 'AES-GCM', false, ['encrypt'])
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, textEncoder.encode(plaintext)))
+  return concatBytes(iv, ct)
+}
+
+async function aesGcmDecrypt(messageKey, payload) {
+  const iv = payload.slice(0, 12)
+  const ct = payload.slice(12)
+  const key = await crypto.subtle.importKey('raw', messageKey, 'AES-GCM', false, ['decrypt'])
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct)
+  return textDecoder.decode(pt)
+}
+
+function loadPlainCache() {
+  try { return JSON.parse(localStorage.getItem(LS_PLAIN_CACHE) || '{}') } catch { return {} }
+}
+
+function savePlainCache(map) {
+  const keys = Object.keys(map)
+  if (keys.length > PLAIN_CACHE_MAX) {
+    for (const k of keys.slice(0, keys.length - PLAIN_CACHE_MAX)) delete map[k]
+  }
+  localStorage.setItem(LS_PLAIN_CACHE, JSON.stringify(map))
+}
+
+function cachePlaintext(ciphertext, plaintext) {
+  if (!ciphertext || plaintext == null) return
+  const map = loadPlainCache()
+  map[ciphertext] = plaintext
+  savePlainCache(map)
+}
+
+function getCachedPlaintext(ciphertext) {
+  if (!ciphertext) return null
+  return loadPlainCache()[ciphertext] ?? null
 }
 
 export async function ensureIdentity() {
   if (!isCryptoAvailable()) throw new Error('Web Crypto API недоступен')
 
-  const existingPub = localStorage.getItem(STORAGE_PUB)
-  const existingPriv = localStorage.getItem(STORAGE_PRIV)
-  if (existingPub && existingPriv) {
-    return { publicKeySpkiB64: existingPub }
+  const legacyPub = localStorage.getItem('chickchirick_e2ee_pub_spki')
+  const legacyPriv = localStorage.getItem('chickchirick_e2ee_priv_jwk')
+  if (legacyPub && legacyPriv && !localStorage.getItem(LS_IK_PUB)) {
+    localStorage.setItem(LS_IK_PUB, legacyPub)
+    localStorage.setItem(LS_IK_PRIV, legacyPriv)
   }
 
-  const pair = await crypto.subtle.generateKey(
-    { name: 'ECDH', namedCurve: 'P-256' },
-    true,
-    ['deriveBits']
-  )
+  let pub = localStorage.getItem(LS_IK_PUB)
+  let priv = localStorage.getItem(LS_IK_PRIV)
+  if (!pub || !priv) {
+    const pair = await generateEcdhPair()
+    pub = await exportSpkiB64(pair.publicKey)
+    priv = JSON.stringify(await exportJwk(pair.privateKey))
+    localStorage.setItem(LS_IK_PUB, pub)
+    localStorage.setItem(LS_IK_PRIV, priv)
+  }
 
-  const spki = await crypto.subtle.exportKey('spki', pair.publicKey)
-  const jwk = await crypto.subtle.exportKey('jwk', pair.privateKey)
+  if (!localStorage.getItem(LS_IK_SIGN_PUB) || !localStorage.getItem(LS_IK_SIGN_PRIV)) {
+    const pair = await generateEcdsaPair()
+    localStorage.setItem(LS_IK_SIGN_PUB, await exportSpkiB64(pair.publicKey))
+    localStorage.setItem(LS_IK_SIGN_PRIV, JSON.stringify(await exportJwk(pair.privateKey)))
+  }
 
-  const pubB64 = bufToB64(spki)
-  localStorage.setItem(STORAGE_PUB, pubB64)
-  localStorage.setItem(STORAGE_PRIV, JSON.stringify(jwk))
+  if (!localStorage.getItem(LS_SPK_PUB) || !localStorage.getItem(LS_SPK_PRIV)) {
+    const pair = await generateEcdhPair()
+    const spkPub = await exportSpkiB64(pair.publicKey)
+    const spkPriv = JSON.stringify(await exportJwk(pair.privateKey))
+    const spkId = Number(localStorage.getItem(LS_SPK_ID) || '0') + 1
+    const signPriv = await crypto.subtle.importKey(
+      'jwk', JSON.parse(localStorage.getItem(LS_IK_SIGN_PRIV)),
+      { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']
+    )
+    const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, signPriv, b64ToBuf(spkPub))
+    localStorage.setItem(LS_SPK_PUB, spkPub)
+    localStorage.setItem(LS_SPK_PRIV, spkPriv)
+    localStorage.setItem(LS_SPK_ID, String(spkId))
+    localStorage.setItem(LS_SPK_SIG, bufToB64(sig))
+  }
 
-  return { publicKeySpkiB64: pubB64 }
+  await ensureOpkPubs()
+  return { publicKeySpkiB64: pub }
 }
 
 export function getMyPublicKeySpkiB64() {
-  return localStorage.getItem(STORAGE_PUB) || null
+  return localStorage.getItem(LS_IK_PUB) || localStorage.getItem('chickchirick_e2ee_pub_spki') || null
 }
 
-async function importMyPrivateKey() {
-  const raw = localStorage.getItem(STORAGE_PRIV)
-  if (!raw) throw new Error('Нет приватного ключа E2EE — вызовите ensureIdentity()')
-  const jwk = JSON.parse(raw)
-  return crypto.subtle.importKey(
-    'jwk',
-    jwk,
-    { name: 'ECDH', namedCurve: 'P-256' },
-    false,
-    ['deriveBits']
-  )
-}
-
-async function importPeerPublicKey(spkiB64) {
-  return crypto.subtle.importKey(
-    'spki',
-    b64ToBuf(spkiB64),
-    { name: 'ECDH', namedCurve: 'P-256' },
-    false,
-    []
-  )
-}
-
-/** JSON-массив известных публичных ключей собеседника (история, max 5). */
-const PEER_KEYS_PREFIX = 'chickchirick_e2ee_peerkeys_'
-
-function peerKeysKey(peerId) {
-  return PEER_KEYS_PREFIX + String(peerId)
-}
-
-/** Все известные ключи peer (новые первые). */
-export function getPeerPublicKeyList(peerId) {
-  if (!peerId) return []
-  const out = []
-  try {
-    const raw = localStorage.getItem(peerKeysKey(peerId))
-    if (raw) {
-      const arr = JSON.parse(raw)
-      if (Array.isArray(arr)) {
-        for (const k of arr) {
-          if (typeof k === 'string' && k && !out.includes(k)) out.push(k)
-        }
-      }
+async function ensureOpkPubs() {
+  let opkMap = {}, pubMap = {}
+  try { opkMap = JSON.parse(localStorage.getItem(LS_OPK) || '{}') } catch {}
+  try { pubMap = JSON.parse(localStorage.getItem(LS_OPK_PUB) || '{}') } catch {}
+  let nextId = Object.keys(opkMap).length ? Math.max(...Object.keys(opkMap).map(Number), 0) + 1 : 1
+  while (Object.keys(opkMap).length < OPK_TARGET) {
+    const pair = await generateEcdhPair()
+    const id = nextId++
+    opkMap[id] = await exportJwk(pair.privateKey)
+    pubMap[id] = await exportSpkiB64(pair.publicKey)
+  }
+  for (const id of Object.keys(opkMap)) {
+    if (!pubMap[id]) {
+      const pair = await generateEcdhPair()
+      opkMap[id] = await exportJwk(pair.privateKey)
+      pubMap[id] = await exportSpkiB64(pair.publicKey)
     }
-  } catch (_) {}
-  const single = localStorage.getItem(PEER_PREFIX + String(peerId))
-  if (single && !out.includes(single)) out.push(single)
-  return out
+  }
+  localStorage.setItem(LS_OPK, JSON.stringify(opkMap))
+  localStorage.setItem(LS_OPK_PUB, JSON.stringify(pubMap))
+  return { opkMap, pubMap }
 }
 
-/**
- * Сохранить ключ собеседника.
- * Старые ключи не выкидываем — иначе история перестаёт расшифровываться.
- */
-export function storePeerPublicKey(peerId, spkiB64) {
-  if (!peerId || !spkiB64) return
-  const list = getPeerPublicKeyList(peerId).filter((k) => k !== spkiB64)
-  list.unshift(spkiB64)
-  const trimmed = list.slice(0, 5)
-  localStorage.setItem(peerKeysKey(peerId), JSON.stringify(trimmed))
-  // «текущий» — для шифрования новых сообщений
-  localStorage.setItem(PEER_PREFIX + String(peerId), spkiB64)
-}
-
-/** Актуальный ключ (для encrypt). */
-export function getPeerPublicKey(peerId) {
-  if (!peerId) return null
-  const list = getPeerPublicKeyList(peerId)
-  return list[0] || null
-}
-
-/**
- * Опубликовать свой публичный ключ на messages-сервис.
- */
 export async function publishMyPublicKey() {
-  const { publicKeySpkiB64 } = await ensureIdentity()
+  await ensureIdentity()
+  const { pubMap } = await ensureOpkPubs()
+  const body = {
+    publicKey: localStorage.getItem(LS_IK_PUB),
+    identityKey: localStorage.getItem(LS_IK_PUB),
+    signedPreKey: localStorage.getItem(LS_SPK_PUB),
+    signedPreKeyId: Number(localStorage.getItem(LS_SPK_ID) || 1),
+    signedPreKeySig: localStorage.getItem(LS_SPK_SIG) || 'legacy',
+    oneTimePreKeys: Object.entries(pubMap).map(([keyId, publicKey]) => ({
+      keyId: Number(keyId), publicKey
+    }))
+  }
   const res = await fetch(`${MESSAGES_API}/e2ee/public-key`, {
-    method: 'PUT',
-    credentials: 'include',
+    method: 'PUT', credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ publicKey: publicKeySpkiB64 })
+    body: JSON.stringify(body)
   })
   if (!res.ok) {
-    // 403/404 — бэкенд без роута или без колонки; не валим открытие чата
     const data = await res.json().catch(() => ({}))
     const err = new Error(data.error || `publish public key failed: ${res.status}`)
     err.status = res.status
     console.warn('publishMyPublicKey:', err.message)
     throw err
   }
-  return publicKeySpkiB64
+  return body.identityKey
 }
 
-/**
- * Загрузить публичный ключ собеседника (кэш → API).
- * @returns {Promise<string|null>}
- */
+export function storePeerPublicKey(peerId, spkiB64) {
+  if (!peerId || !spkiB64) return
+  const map = JSON.parse(localStorage.getItem(LS_PEER_KEYS) || '{}')
+  const key = String(peerId)
+  const list = Array.isArray(map[key]) ? map[key] : []
+  if (!list.includes(spkiB64)) {
+    list.unshift(spkiB64)
+    map[key] = list.slice(0, 5)
+    localStorage.setItem(LS_PEER_KEYS, JSON.stringify(map))
+  }
+}
+
+export function getPeerPublicKeyList(peerId) {
+  try {
+    const map = JSON.parse(localStorage.getItem(LS_PEER_KEYS) || '{}')
+    const list = map[String(peerId)]
+    return Array.isArray(list) ? list : []
+  } catch { return [] }
+}
+
+export function getPeerPublicKey(peerId) {
+  return getPeerPublicKeyList(peerId)[0] || null
+}
+
 export async function fetchPeerPublicKey(peerId) {
   const id = Number(peerId)
   if (!id) return null
-
-  const cached = getPeerPublicKey(id)
-  if (cached) return cached
-
-  if (peerFetchInflight.has(id)) {
-    return peerFetchInflight.get(id)
-  }
-
+  if (peerFetchInflight.has(id)) return peerFetchInflight.get(id)
   const p = (async () => {
     try {
-      const res = await fetch(`${MESSAGES_API}/e2ee/public-key/${id}`, {
-        method: 'GET',
-        credentials: 'include'
-      })
+      const res = await fetch(`${MESSAGES_API}/e2ee/public-key/${id}`, { method: 'GET', credentials: 'include' })
       if (!res.ok) return null
       const data = await res.json().catch(() => ({}))
-      const key = (data.publicKey || data.public_key || '').trim()
+      const key = (data.identityKey || data.publicKey || data.public_key || '').trim()
       if (key) storePeerPublicKey(id, key)
       return key || null
     } catch (e) {
@@ -197,110 +295,124 @@ export async function fetchPeerPublicKey(peerId) {
       peerFetchInflight.delete(id)
     }
   })()
-
   peerFetchInflight.set(id, p)
   return p
 }
 
-async function deriveAesKey(peerSpkiB64) {
-  const myPriv = await importMyPrivateKey()
-  const peerPub = await importPeerPublicKey(peerSpkiB64)
-
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'ECDH', public: peerPub },
-    myPriv,
-    256
-  )
-
-  const baseKey = await crypto.subtle.importKey(
-    'raw',
-    bits,
-    'HKDF',
-    false,
-    ['deriveKey']
-  )
-
-  return crypto.subtle.deriveKey(
-    {
-      name: 'HKDF',
-      hash: 'SHA-256',
-      salt: textEncoder.encode('chickchirick-e2ee-v1'),
-      info: textEncoder.encode('msg-aes-gcm')
-    },
-    baseKey,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  )
+export async function prepareE2eeForPeer(peerId) {
+  try {
+    await ensureIdentity()
+    try { await publishMyPublicKey() } catch (e) { console.warn('publishMyPublicKey:', e) }
+    const key = await fetchPeerPublicKey(peerId)
+    return !!key
+  } catch (e) {
+    console.warn('prepareE2eeForPeer:', e)
+    return false
+  }
 }
 
-export async function encryptForPeer(peerId, plaintext) {
-  let peerPub = getPeerPublicKey(peerId)
-  if (!peerPub) {
-    peerPub = await fetchPeerPublicKey(peerId)
-  }
-  if (!peerPub) {
-    throw new Error('Нет публичного ключа собеседника')
-  }
+export function canEncryptFor(peerId) {
+  return !!getPeerPublicKey(peerId) && isCryptoAvailable()
+}
 
+export async function encryptForPeer(peerId, plainText) {
   await ensureIdentity()
-  const aesKey = await deriveAesKey(peerPub)
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-  const ct = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    aesKey,
-    textEncoder.encode(plaintext)
-  )
+  let peerPubB64 = getPeerPublicKey(peerId)
+  if (!peerPubB64) peerPubB64 = await fetchPeerPublicKey(peerId)
+  if (!peerPubB64) throw new Error('E2EE: нет публичного ключа собеседника')
 
-  const combined = new Uint8Array(iv.length + ct.byteLength)
-  combined.set(iv, 0)
-  combined.set(new Uint8Array(ct), iv.length)
-
-  return E2EE_PREFIX + bufToB64(combined)
-}
-
-async function tryDecryptWithPeerKey(peerSpkiB64, payloadB64) {
-  const combined = new Uint8Array(b64ToBuf(payloadB64))
-  if (combined.length < 13) return null
-  const iv = combined.slice(0, 12)
-  const ct = combined.slice(12)
-  const aesKey = await deriveAesKey(peerSpkiB64)
-  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, ct)
-  return textDecoder.decode(pt)
+  const eph = await generateEcdhPair()
+  const theirPub = await importEcdhPub(peerPubB64)
+  const shared = await ecdh(eph.privateKey, theirPub)
+  const mk = await hkdf(shared, new Uint8Array(32), 'ChickChirick-E2EE-v3', 32)
+  const payload = await aesGcmEncrypt(mk, plainText)
+  const ephPubSpki = new Uint8Array(await crypto.subtle.exportKey('spki', eph.publicKey))
+  const spkiLen = new Uint8Array(2)
+  spkiLen[0] = (ephPubSpki.length >> 8) & 0xff
+  spkiLen[1] = ephPubSpki.length & 0xff
+  const packed = concatBytes(spkiLen, ephPubSpki, payload)
+  const wire = E2EE_PREFIX_V3 + bufToB64(packed)
+  cachePlaintext(wire, plainText)
+  return wire
 }
 
 export async function decryptFromPeer(peerId, text) {
   if (!text || typeof text !== 'string') return text || ''
-  if (!text.startsWith(E2EE_PREFIX)) return text
 
-  await ensureIdentity()
+  const cached = getCachedPlaintext(text)
+  if (cached != null) return cached
 
-  // Подтянуть ключ с API, не затирая историю локальных ключей
-  try {
-    await fetchPeerPublicKey(peerId)
-  } catch (_) {}
-
-  const keys = getPeerPublicKeyList(peerId)
-  if (keys.length === 0) {
+  if (text.startsWith(E2EE_PREFIX_V3) || text.startsWith(E2EE_PREFIX_V3_LEGACY)) {
+    return decryptV3(text)
+  }
+  if (text.startsWith(E2EE_PREFIX_V2) || text.startsWith(E2EE_PREFIX_V2_LEGACY)) {
     return 'Зашифрованное сообщение'
   }
+  if (text.startsWith(E2EE_PREFIX) || text.startsWith(E2EE_PREFIX_LEGACY)) {
+    return decryptV1(peerId, text)
+  }
+  return text
+}
 
-  const payload = text.slice(E2EE_PREFIX.length)
+async function decryptV3(text) {
+  await ensureIdentity()
+  try {
+    const prefixLen = text.startsWith(E2EE_PREFIX_V3_LEGACY)
+      ? E2EE_PREFIX_V3_LEGACY.length
+      : E2EE_PREFIX_V3.length
+    const packed = b64ToBytes(text.slice(prefixLen))
+    if (packed.length < 3) return 'Зашифрованное сообщение'
+    const spkiLen = (packed[0] << 8) | packed[1]
+    if (spkiLen < 50 || 2 + spkiLen + 13 > packed.length) return 'Зашифрованное сообщение'
+    const ephSpki = packed.slice(2, 2 + spkiLen)
+    const payload = packed.slice(2 + spkiLen)
+    const ephPub = await crypto.subtle.importKey(
+      'spki', ephSpki, { name: 'ECDH', namedCurve: 'P-256' }, true, []
+    )
+    const myPriv = await importEcdhPriv(JSON.parse(localStorage.getItem(LS_IK_PRIV)))
+    const shared = await ecdh(myPriv, ephPub)
+    const mk = await hkdf(shared, new Uint8Array(32), 'ChickChirick-E2EE-v3', 32)
+    const plain = await aesGcmDecrypt(mk, payload)
+    cachePlaintext(text, plain)
+    return plain
+  } catch (e) {
+    console.warn('decryptV3 failed:', e)
+    return 'Зашифрованное сообщение'
+  }
+}
+
+async function decryptV1(peerId, text) {
+  await ensureIdentity()
+  try { await fetchPeerPublicKey(peerId) } catch (_) {}
+  const keys = getPeerPublicKeyList(peerId)
+  const legacy = localStorage.getItem('chickchirick_e2ee_peer_' + peerId)
+  if (legacy && !keys.includes(legacy)) keys.push(legacy)
+  if (keys.length === 0) return 'Зашифрованное сообщение'
+  const prefixLen = text.startsWith(E2EE_PREFIX_LEGACY) ? E2EE_PREFIX_LEGACY.length : E2EE_PREFIX.length
+  const payload = b64ToBytes(text.slice(prefixLen))
+  const ikPrivJwk = localStorage.getItem(LS_IK_PRIV) || localStorage.getItem('chickchirick_e2ee_priv_jwk')
+  if (!ikPrivJwk) return 'Зашифрованное сообщение'
+  const ikPriv = await importEcdhPriv(JSON.parse(ikPrivJwk))
   for (const peerPub of keys) {
     try {
-      const plain = await tryDecryptWithPeerKey(peerPub, payload)
-      if (plain != null) return plain
-    } catch (_) {
-      // пробуем следующий известный ключ
-    }
+      const theirPub = await importEcdhPub(peerPub)
+      const shared = await ecdh(ikPriv, theirPub)
+      const mk = await hkdf(shared, textEncoder.encode('chickchirick-e2ee-v1'), 'msg', 32)
+      const plain = await aesGcmDecrypt(mk, payload)
+      cachePlaintext(text, plain)
+      return plain
+    } catch (_) {}
   }
-
-  // Свой identity сменился (новый браузер / очистка storage) — старые сообщения невосстановимы
   return 'Зашифрованное сообщение'
 }
 
 export function isEncryptedText(text) {
-  return typeof text === 'string' && text.startsWith(E2EE_PREFIX)
+  if (typeof text !== 'string') return false
+  return (
+    text.startsWith(E2EE_PREFIX_V3) || text.startsWith(E2EE_PREFIX_V3_LEGACY) ||
+    text.startsWith(E2EE_PREFIX_V2) || text.startsWith(E2EE_PREFIX_V2_LEGACY) ||
+    text.startsWith(E2EE_PREFIX) || text.startsWith(E2EE_PREFIX_LEGACY)
+  )
 }
 
 export function isKeyAnnounce(text) {
@@ -324,27 +436,28 @@ export function tryConsumeKeyAnnounce(senderId, text) {
   return true
 }
 
-export function canEncryptFor(peerId) {
-  return !!getPeerPublicKey(peerId) && isCryptoAvailable()
-}
-
 /**
- * Подготовить E2EE к чату: identity + publish + fetch peer key.
- * Не шлёт сообщения в ленту.
- * @returns {Promise<boolean>} true если можно шифровать
+ * Всегда возвращает текст для UI: plaintext либо «Зашифрованное сообщение».
+ * Никогда не отдаёт сырой e2ee:* в интерфейс.
  */
-export async function prepareE2eeForPeer(peerId) {
-  try {
-    await ensureIdentity()
-    try {
-      await publishMyPublicKey()
-    } catch (e) {
-      console.warn('publishMyPublicKey:', e)
+export async function resolveE2eeDisplayText(peerId, rawText) {
+  if (rawText == null || rawText === '') return ''
+  if (!isEncryptedText(rawText)) {
+    // на всякий случай: похоже на ciphertext без распознанного префикса
+    if (typeof rawText === 'string' && /^e2ee:v\d+:/i.test(rawText.trim())) {
+      return 'Зашифрованное сообщение'
     }
-    const key = await fetchPeerPublicKey(peerId)
-    return !!key
+    return rawText
+  }
+  try {
+    const plain = await decryptFromPeer(peerId, rawText)
+    if (plain == null || plain === '') return 'Зашифрованное сообщение'
+    if (isEncryptedText(plain) || /^e2ee:v\d+:/i.test(String(plain).trim())) {
+      return 'Зашифрованное сообщение'
+    }
+    return plain
   } catch (e) {
-    console.warn('prepareE2eeForPeer:', e)
-    return false
+    console.warn('resolveE2eeDisplayText:', e)
+    return 'Зашифрованное сообщение'
   }
 }

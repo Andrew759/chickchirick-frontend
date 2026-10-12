@@ -63,7 +63,11 @@
             📄 {{ msg.fileName || 'Файл' }}
           </a>
         </div>
-        <div v-if="msg.text" class="text">{{ msg.text }}</div>
+        <div v-if="msg.text" class="text">{{
+          (typeof msg.text === 'string' && (/^e2ee:v\d+:/i.test(msg.text.trim()) || msg.text.startsWith('🔒e2ee:')))
+            ? 'Зашифрованное сообщение'
+            : msg.text
+        }}</div>
       </div>
       <button
         v-if="msg.fromMe"

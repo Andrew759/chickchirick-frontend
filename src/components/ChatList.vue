@@ -127,8 +127,8 @@ function lastMessagePreview(chat) {
   if (!msg) return 'Нет сообщений'
   const text = (msg.text || '').trim()
   if (!text) return 'Нет сообщений'
-  if (text.startsWith('🔒e2ee:v1:')) return 'Сообщение'
-  if (text === 'Зашифрованное сообщение' || text.startsWith('🔒')) return 'Сообщение'
+  if (/^e2ee:v\d+:/i.test(text) || text.startsWith('🔒e2ee:')) return 'Сообщение'
+  if (text === 'Зашифрованное сообщение' || /^e2ee:v\d+:/i.test(text) || text.startsWith('🔒')) return 'Сообщение'
   return text
 }
 

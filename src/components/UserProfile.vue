@@ -232,8 +232,8 @@ const musicInput = ref(null)
 const viewerOpen = ref(false)
 const viewerIndex = ref(0)
 
-const photos = computed(() => media.value.filter((m) => m.kind === 'image'))
-const tracks = computed(() => media.value.filter((m) => m.kind === 'audio'))
+const photos = computed(() => media.value.filter((m) => m.kind === 'image' || (m.kind === 'file' && /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(m.fileName || ''))))
+const tracks = computed(() => media.value.filter((m) => m.kind === 'audio' || (m.kind === 'file' && /\.(mp3|ogg|oga|opus|wav|m4a|aac|flac)$/i.test(m.fileName || ''))))
 
 const avatarUrl = computed(() =>
   photos.value[0] ? getFileUrl(photos.value[0].fileUuid) : ''
@@ -301,7 +301,7 @@ function applyLocalMeta(item) {
   return {
     ...item,
     fileName: item.fileName || local.fileName || '',
-    kind: item.kind === 'file' && local.kind ? local.kind : item.kind
+    kind: (item.kind && item.kind !== 'file') ? item.kind : (local.kind || item.kind)
   }
 }
 
@@ -437,12 +437,12 @@ async function uploadMediaFiles(files, kind) {
     uploadProgress.value = `Загрузка ${done} из ${total}…`
     const fileUuid = crypto.randomUUID()
     await uploadFile(fileUuid, file)
-    const res = await createUserPhoto(userServiceId.value, fileUuid)
-    const payload = res?.payload || res
-    const photoId = Number(payload?.id || payload?.Id) || 0
     const itemKind =
       kind ||
       detectMediaKind({ fileName: file.name, contentType: file.type })
+    const res = await createUserPhoto(userServiceId.value, fileUuid, itemKind)
+    const payload = res?.payload || res
+    const photoId = Number(payload?.id || payload?.Id) || 0
     saveLocalMeta(fileUuid, file.name, itemKind)
     media.value.unshift({
       id: photoId,

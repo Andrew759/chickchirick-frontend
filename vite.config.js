@@ -4,19 +4,18 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   server: {
-    host: true, // Разрешает слушать внешние интерфейсы
-    allowedHosts: true, // Временно разрешаем любые хосты, чтобы не прописывать каждый раз новые ссылки туннелей
+    host: true,
+    allowedHosts: true,
     hmr: {
-      protocol: 'wss', // Автоматически переключит HMR на безопасные сокеты туннеля
+      protocol: 'ws',
+      host: 'localhost',
     },
     proxy: {
-      // Перенаправляем запросы пользователей на :8081
       '/api/user': {
         target: 'http://127.0.0.1:8081',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/user/, '')
       },
-      // Перенаправляем запросы сообщений на :8083
       '/api/messages': {
         target: 'http://127.0.0.1:8083',
         changeOrigin: true,
