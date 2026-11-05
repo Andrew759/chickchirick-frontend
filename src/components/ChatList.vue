@@ -103,6 +103,7 @@
 import { computed, ref } from 'vue'
 import { useChatStore, formatMessageTime } from '../stores/chat'
 import { getFileUrl } from '../services/files'
+import { parseFileMessageText } from '../services/fileMarker'
 import UserSearch from './UserSearch.vue'
 import PhotoViewer from './PhotoViewer.vue'
 import AvatarEqualizer from './AvatarEqualizer.vue'
@@ -138,10 +139,63 @@ const profileLetter = computed(() => {
 function lastMessagePreview(chat) {
   const msg = lastMessage(chat)
   if (!msg) return 'Нет сообщений'
+
+  // Store кладёт caption в text и выносит файл в fileUuid/fileName
+  const fileName = msg.fileName || ''
+  const fileUuid = msg.fileUuid || null
   const text = (msg.text || '').trim()
-  if (!text) return 'Нет сообщений'
-  if (/^e2ee:v\d+:/i.test(text) || text.startsWith('🔒e2ee:')) return 'Сообщение'
-  if (text === 'Зашифрованное сообщение' || /^e2ee:v\d+:/i.test(text) || text.startsWith('🔒')) return 'Сообщение'
+
+  if (msg.isVoiceMessage || /^voice-message-/i.test(fileName)) {
+    return 'Голосовое сообщение'
+  }
+  if (msg.isVideoNote || /^video-note-/i.test(fileName)) {
+    return 'Видеосообщение'
+  }
+  if (msg.isVideo) return 'Видео'
+
+  // Стикер (в т.ч. без эмодзи: text пустой, fileName = sticker-*.webp)
+  if (fileUuid && /^sticker-/i.test(fileName)) {
+    if (text && /\p{Extended_Pictographic}/u.test(text)) return text
+    if (text && [...text].length <= 4) return text
+    return 'Стикер'
+  }
+
+  // Fallback по маркеру в сыром text (если store не разобрал)
+  if (text) {
+    const { fileUuid: fu, fileName: fn, caption } = parseFileMessageText(text)
+    const name = fn || ''
+    const cap = (caption || '').trim()
+    if (fu && name) {
+      if (/^sticker-/i.test(name)) {
+        if (cap && /\p{Extended_Pictographic}/u.test(cap)) return cap
+        if (cap && [...cap].length <= 4) return cap
+        return 'Стикер'
+      }
+      if (/^voice-message-/i.test(name)) return 'Голосовое сообщение'
+      if (/^video-note-/i.test(name)) return 'Видеосообщение'
+      if (/\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(name)) return 'Видео'
+      if (/\.(mp3|ogg|oga|opus|wav|m4a|aac|flac)$/i.test(name)) return 'Аудио'
+      if (/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name)) return cap || 'Фото'
+      return cap || name
+    }
+  }
+
+  if (!text) {
+    if (fileUuid && msg.isImage) return 'Фото'
+    if (fileUuid && msg.isAudio) return 'Аудио'
+    if (fileUuid) return 'Файл'
+    return 'Нет сообщений'
+  }
+
+  if (
+    text === 'Зашифрованное сообщение' ||
+    /^e2ee:v\d+:/i.test(text) ||
+    text.startsWith('🔒e2ee:') ||
+    text.startsWith('🔒')
+  ) {
+    return 'Сообщение'
+  }
+
   return text
 }
 

@@ -1,7 +1,7 @@
 /**
  * Клиент сервиса стикеров (chickchirick-stickers).
  * Прокси: /api/stickers → http://127.0.0.1:8087
- * Создание паков/стикеров — под cookie access_token (авторизованный пользователь).
+ * Мутации — под cookie access_token.
  */
 
 const PREFIX = '/api/stickers'
@@ -50,7 +50,6 @@ export function uninstallPack(packId) {
   return request(`/sticker-packs/${encodeURIComponent(packId)}/install`, { method: 'DELETE' })
 }
 
-/** Создать набор (авторизованный пользователь). */
 export function createPack(body) {
   return request('/sticker-packs', {
     method: 'POST',
@@ -58,11 +57,32 @@ export function createPack(body) {
   })
 }
 
-/** Добавить стикер в набор (авторизованный пользователь). */
+/** Обновить набор (обложка, title, публикация…). */
+export function updatePack(id, body) {
+  return request(`/sticker-packs/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body)
+  })
+}
+
 export function createSticker(packId, body) {
   return request(`/sticker-packs/${encodeURIComponent(packId)}/stickers`, {
     method: 'POST',
     body: JSON.stringify(body)
+  })
+}
+
+/** Обновить стикер (emoji, title…). */
+export function updateSticker(id, body) {
+  return request(`/stickers/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body)
+  })
+}
+
+export function deleteSticker(id) {
+  return request(`/stickers/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
   })
 }
 

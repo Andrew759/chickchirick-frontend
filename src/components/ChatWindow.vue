@@ -192,7 +192,7 @@ async function handleSend(payload) {
   // Стикер: файл уже в files-сервисе (image_uuid), upload не нужен
   if (sticker?.image_uuid) {
     const fileUuid = sticker.image_uuid
-    const plain = buildFileMessageText(fileUuid, stickerFileName(sticker), '')
+    const plain = buildFileMessageText(fileUuid, stickerFileName(sticker), sticker.emoji || '')
     const text = await maybeEncrypt(recipientId, plain)
     sendMessage({ recipientId, text })
     waitAndLinkFile(fileUuid)

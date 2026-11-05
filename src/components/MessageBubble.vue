@@ -63,11 +63,7 @@
             📄 {{ msg.fileName || 'Файл' }}
           </a>
         </div>
-        <div v-if="msg.text" class="text">{{
-          (typeof msg.text === 'string' && (/^e2ee:v\d+:/i.test(msg.text.trim()) || msg.text.startsWith('🔒e2ee:')))
-            ? 'Зашифрованное сообщение'
-            : msg.text
-        }}</div>
+        <div v-if="showText" class="text">{{ displayText }}</div>
       </div>
       <button
         v-if="msg.fromMe"
@@ -100,6 +96,25 @@ defineEmits(['open-photo', 'open-video', 'delete'])
 
 const fileUrl = computed(() => getFileUrl(props.msg.fileUuid))
 const timeLabel = computed(() => formatMessageTime(props.msg.createdAt) || '·')
+
+/** Стикер: caption (эмодзи) под картинкой не показываем */
+const isSticker = computed(() =>
+  !!props.msg.fileUuid && /^sticker-/i.test(props.msg.fileName || '')
+)
+
+const showText = computed(() => {
+  if (isSticker.value) return false
+  const t = props.msg.text
+  return !!(t && String(t).trim())
+})
+
+const displayText = computed(() => {
+  const t = typeof props.msg.text === 'string' ? props.msg.text : ''
+  if (/^e2ee:v\d+:/i.test(t.trim()) || t.startsWith('🔒e2ee:')) {
+    return 'Зашифрованное сообщение'
+  }
+  return t
+})
 </script>
 
 <style scoped>
