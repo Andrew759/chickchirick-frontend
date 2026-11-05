@@ -5,17 +5,18 @@
         <button type="button" class="sm-back" title="Назад" @click="onBack">←</button>
         <span class="sm-title">{{ viewTitle }}</span>
         <button
-          v-if="view === 'list'"
-          type="button"
-          class="sm-action"
-          title="Новый набор"
-          @click="view = 'create'"
+            v-if="view === 'list'"
+            type="button"
+            class="sm-action"
+            title="Новый набор"
+            @click="view = 'create'"
         >
           +
         </button>
         <span v-else class="sm-action-spacer" />
       </div>
 
+      <!-- LIST -->
       <div v-if="view === 'list'" class="sm-body">
         <div class="sm-tabs">
           <button type="button" :class="['sm-tab', tab === 'mine' && 'on']" @click="tab = 'mine'">Мои</button>
@@ -40,20 +41,20 @@
               </span>
             </button>
             <button
-              v-if="tab === 'catalog' && !isInstalled(pack.id)"
-              type="button"
-              class="sm-btn"
-              :disabled="busy === pack.id"
-              @click="doInstall(pack)"
+                v-if="tab === 'catalog' && !isInstalled(pack.id)"
+                type="button"
+                class="sm-btn"
+                :disabled="busy === pack.id"
+                @click="doInstall(pack)"
             >
               +
             </button>
             <button
-              v-else-if="tab === 'mine'"
-              type="button"
-              class="sm-btn ghost"
-              :disabled="busy === pack.id"
-              @click="doUninstall(pack)"
+                v-else-if="tab === 'mine'"
+                type="button"
+                class="sm-btn ghost"
+                :disabled="busy === pack.id"
+                @click="doUninstall(pack)"
             >
               ×
             </button>
@@ -62,11 +63,40 @@
         </div>
       </div>
 
+      <!-- PACK DETAIL -->
       <div v-else-if="view === 'pack'" class="sm-body">
+        <!-- Cover edit -->
+        <div class="sm-pack-bar">
+          <div class="sm-pack-cover-wrap">
+            <img
+                v-if="currentPack?.image_uuid"
+                :src="fileUrl(currentPack.image_uuid)"
+                class="sm-pack-cover-lg"
+                alt=""
+            />
+            <span v-else class="sm-pack-cover-lg ph">{{ (currentPack?.title || '?')[0] }}</span>
+            <label class="sm-cover-edit" title="Сменить обложку">
+              <input type="file" accept="image/*" hidden :disabled="coverUpdating" @change="onChangeCover" />
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/>
+              </svg>
+            </label>
+          </div>
+          <div class="sm-pack-bar-text">
+            <div class="sm-pack-bar-title">{{ currentPack?.title }}</div>
+            <div class="sm-pack-bar-sub">{{ packStickers.length }} стикеров</div>
+          </div>
+        </div>
+
         <p v-if="stickersLoading" class="sm-hint">Загрузка…</p>
         <div class="sm-grid">
-          <div v-for="s in packStickers" :key="s.id" class="sm-cell">
+          <div v-for="s in packStickers" :key="s.id" class="sm-cell has-actions">
             <img :src="fileUrl(s.image_uuid)" :alt="s.title || s.slug" />
+            <span v-if="s.emoji" class="sm-emoji-badge">{{ s.emoji }}</span>
+            <div class="sm-cell-actions">
+              <button type="button" class="sm-mini" title="Эмодзи" @click="startEditEmoji(s)">☺</button>
+              <button type="button" class="sm-mini danger" title="Удалить" @click="onDeleteSticker(s)">×</button>
+            </div>
           </div>
           <label class="sm-cell add" :class="{ busy: uploading }">
             <input type="file" accept="image/*" multiple hidden :disabled="uploading" @change="onAddStickers" />
@@ -79,8 +109,39 @@
           </label>
         </div>
         <p v-if="status" class="sm-hint">{{ status }}</p>
+
+        <!-- Emoji editor -->
+        <div v-if="emojiEdit" class="sm-emoji-sheet">
+          <div class="sm-emoji-sheet-title">Эмодзи для стикера</div>
+          <input
+              v-model="emojiDraft"
+              type="text"
+              maxlength="8"
+              class="sm-emoji-input"
+              placeholder="😀"
+              @keyup.enter="saveEmoji"
+          />
+          <div class="sm-emoji-quick sm-emoji-scroll">
+            <button
+                v-for="e in allEmojis"
+                :key="e"
+                type="button"
+                class="sm-emoji-chip"
+                @click="emojiDraft = e"
+            >
+              {{ e }}
+            </button>
+          </div>
+          <div class="sm-emoji-actions">
+            <button type="button" class="sm-submit ghost" @click="emojiEdit = null">Отмена</button>
+            <button type="button" class="sm-submit" :disabled="emojiSaving" @click="saveEmoji">
+              {{ emojiSaving ? '…' : 'Сохранить' }}
+            </button>
+          </div>
+        </div>
       </div>
 
+      <!-- CREATE -->
       <div v-else class="sm-body sm-form">
         <label class="sm-field">
           Название
@@ -101,10 +162,10 @@
           Опубликовать в каталоге
         </label>
         <button
-          type="button"
-          class="sm-submit"
-          :disabled="saving || !form.title.trim()"
-          @click="submitPack"
+            type="button"
+            class="sm-submit"
+            :disabled="saving || !form.title.trim()"
+            @click="submitPack"
         >
           {{ saving ? 'Создание…' : 'Создать' }}
         </button>
@@ -117,6 +178,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { getFileUrl, uploadFile } from '../services/files'
+import { getAllEmojis } from '../services/emojis'
 import {
   fetchStickerPacks,
   fetchInstalledPacks,
@@ -124,7 +186,10 @@ import {
   installPack,
   uninstallPack,
   createPack,
+  updatePack,
   createSticker,
+  updateSticker,
+  deleteSticker,
   slugify
 } from '../services/stickers'
 
@@ -143,6 +208,13 @@ const currentPack = ref(null)
 const packStickers = ref([])
 const stickersLoading = ref(false)
 const uploading = ref(false)
+const coverUpdating = ref(false)
+
+const emojiEdit = ref(null)
+const emojiDraft = ref('')
+const emojiSaving = ref(false)
+
+const allEmojis = ref([])
 
 const form = ref({ title: '', published: true })
 const coverFile = ref(null)
@@ -150,7 +222,7 @@ const coverName = ref('')
 const saving = ref(false)
 
 const visiblePacks = computed(() =>
-  tab.value === 'mine' ? installed.value : catalog.value
+    tab.value === 'mine' ? installed.value : catalog.value
 )
 
 const viewTitle = computed(() => {
@@ -170,6 +242,10 @@ function isInstalled(id) {
 function onBack() {
   if (view.value === 'list') {
     emit('close')
+    return
+  }
+  if (emojiEdit.value) {
+    emojiEdit.value = null
     return
   }
   view.value = 'list'
@@ -195,9 +271,10 @@ async function load() {
 }
 
 async function openPack(pack) {
-  currentPack.value = pack
+  currentPack.value = { ...pack }
   view.value = 'pack'
   status.value = ''
+  emojiEdit.value = null
   stickersLoading.value = true
   try {
     if (pack.stickers?.length) {
@@ -281,6 +358,30 @@ async function submitPack() {
   }
 }
 
+async function onChangeCover(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''
+  if (!file || !currentPack.value) return
+  coverUpdating.value = true
+  status.value = ''
+  try {
+    const imageUuid = crypto.randomUUID()
+    await uploadFile(imageUuid, file)
+    const updated = await updatePack(currentPack.value.id, { image_uuid: imageUuid })
+    currentPack.value = { ...currentPack.value, ...(updated || {}), image_uuid: imageUuid }
+    // sync lists
+    const sync = (list) =>
+        list.map((p) => (p.id === currentPack.value.id ? { ...p, image_uuid: imageUuid } : p))
+    catalog.value = sync(catalog.value)
+    installed.value = sync(installed.value)
+    status.value = 'Обложка обновлена'
+  } catch (err) {
+    status.value = err.message || 'Не удалось сменить обложку'
+  } finally {
+    coverUpdating.value = false
+  }
+}
+
 async function onAddStickers(e) {
   const files = [...(e.target.files || [])]
   e.target.value = ''
@@ -313,14 +414,55 @@ async function onAddStickers(e) {
   }
 }
 
+function startEditEmoji(sticker) {
+  emojiEdit.value = sticker
+  emojiDraft.value = sticker.emoji || ''
+}
+
+async function saveEmoji() {
+  if (!emojiEdit.value) return
+  emojiSaving.value = true
+  status.value = ''
+  try {
+    const emoji = emojiDraft.value.trim()
+    await updateSticker(emojiEdit.value.id, { emoji })
+    packStickers.value = packStickers.value.map((s) =>
+        s.id === emojiEdit.value.id ? { ...s, emoji } : s
+    )
+    emojiEdit.value = null
+    status.value = 'Эмодзи сохранено'
+  } catch (e) {
+    status.value = e.message || 'Не удалось сохранить эмодзи'
+  } finally {
+    emojiSaving.value = false
+  }
+}
+
+async function onDeleteSticker(sticker) {
+  if (!confirm('Удалить этот стикер?')) return
+  status.value = ''
+  try {
+    await deleteSticker(sticker.id)
+    packStickers.value = packStickers.value.filter((s) => s.id !== sticker.id)
+    status.value = 'Стикер удалён'
+  } catch (e) {
+    status.value = e.message || 'Не удалось удалить'
+  }
+}
+
 watch(view, (v) => {
   if (v === 'list') {
     currentPack.value = null
     status.value = ''
+    emojiEdit.value = null
   }
 })
 
 onMounted(load)
+
+onMounted(() => {
+  allEmojis.value = getAllEmojis()
+})
 </script>
 
 <style scoped>
@@ -387,6 +529,7 @@ onMounted(load)
   min-height: 0;
   overflow-y: auto;
   padding: 8px 0 16px;
+  position: relative;
 }
 
 .sm-tabs {
@@ -528,6 +671,69 @@ onMounted(load)
   text-align: center;
 }
 
+/* Pack header with cover */
+.sm-pack-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px 12px;
+}
+
+.sm-pack-cover-wrap {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+}
+
+.sm-pack-cover-lg {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: #e8f6fd;
+  display: block;
+}
+
+.sm-pack-cover-lg.ph {
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 22px;
+  color: #168dcc;
+}
+
+.sm-cover-edit {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #38bdf8, #2aabee);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(42, 171, 238, 0.35);
+}
+
+.sm-pack-bar-text {
+  min-width: 0;
+}
+
+.sm-pack-bar-title {
+  font-weight: 700;
+  font-size: 16px;
+  color: #163247;
+}
+
+.sm-pack-bar-sub {
+  font-size: 12px;
+  color: #8aa1ae;
+  margin-top: 2px;
+}
+
 .sm-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -542,12 +748,58 @@ onMounted(load)
   overflow: hidden;
   display: grid;
   place-items: center;
+  position: relative;
 }
 
 .sm-cell img {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.sm-cell.has-actions:hover .sm-cell-actions {
+  opacity: 1;
+}
+
+.sm-emoji-badge {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  font-size: 14px;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  padding: 2px 4px;
+}
+
+.sm-cell-actions {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.sm-mini {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  color: #0f172a;
+  font-size: 16px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
+
+.sm-mini.danger {
+  color: #b91c1c;
 }
 
 .sm-cell.add {
@@ -560,6 +812,93 @@ onMounted(load)
 .sm-cell.add:hover {
   border-color: #2aabee;
   background: #e0f2fe;
+}
+
+.sm-cell.add.busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.sm-add-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: #2aabee;
+}
+
+.sm-add-text {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Emoji sheet */
+.sm-emoji-sheet {
+  margin: 8px 12px 0;
+  padding: 12px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sm-emoji-sheet-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.sm-emoji-input {
+  border: none;
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 28px;
+  text-align: center;
+  box-shadow: inset 0 0 0 1px #e2e8f0;
+}
+
+.sm-emoji-quick {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  justify-content: center;
+}
+
+/* скролл для полного списка эмодзи */
+.sm-emoji-scroll {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #e2e8f0;
+}
+
+.sm-emoji-chip {
+  border: none;
+  background: #fff;
+  border-radius: 10px;
+  width: 100%;
+  aspect-ratio: 1;
+  font-size: 18px;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px #e2e8f0;
+  display: grid;
+  place-items: center;
+}
+
+.sm-emoji-chip:hover {
+  background: #e0f2fe;
+}
+
+.sm-emoji-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .sm-form {
@@ -590,7 +929,6 @@ onMounted(load)
   color: #0b6ea8;
   font-size: 14px;
   font-weight: 600;
-  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .sm-file-btn:hover {
@@ -616,26 +954,6 @@ onMounted(load)
   white-space: nowrap;
   color: #163247;
   font-weight: 500;
-}
-
-.sm-add-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  color: #2aabee;
-}
-
-.sm-add-text {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.sm-cell.add.busy {
-  opacity: 0.6;
-  pointer-events: none;
 }
 
 .sm-field input[type='text'] {
@@ -664,6 +982,12 @@ onMounted(load)
   padding: 12px;
   border-radius: 12px;
   cursor: pointer;
+  flex: 1;
+}
+
+.sm-submit.ghost {
+  background: #e2e8f0;
+  color: #475569;
 }
 
 .sm-submit:disabled {
