@@ -60,7 +60,6 @@ import { useChatStore } from '../stores/chat'
 import { sendMessage, sendTyping, requestDeleteMessage } from '../services/socket'
 import { uploadFile, linkFileToMessage, getFileUrl } from '../services/files'
 import { buildFileMessageText } from '../services/fileMarker'
-import { stickerFileName } from '../services/stickers'
 import {
   canEncryptFor,
   encryptForPeer,
@@ -173,6 +172,11 @@ async function maybeEncrypt(recipientId, plainText) {
     console.warn('E2EE encrypt failed, sending plaintext:', e)
     return plainText
   }
+}
+
+function stickerFileName(sticker) {
+  const slug = (sticker?.slug || 'sticker').replace(/[^\w.-]+/g, '_')
+  return `sticker-${slug}.webp`
 }
 
 async function handleSend(payload) {

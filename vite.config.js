@@ -30,6 +30,14 @@ export default defineConfig({
         target: 'http://127.0.0.1:8087',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/stickers/, '')
+      },
+      // Отдельный path, чтобы не пересекаться с HMR Vite
+      // browser → /messages-ws → 127.0.0.1:8085/ws
+      '/messages-ws': {
+        target: 'http://127.0.0.1:8085',
+        changeOrigin: true,
+        ws: true,
+        rewrite: (path) => path.replace(/^\/messages-ws/, '/ws')
       }
     }
   }

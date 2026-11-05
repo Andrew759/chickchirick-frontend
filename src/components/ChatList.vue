@@ -19,6 +19,16 @@
         </AvatarEqualizer>
       </button>
       <span class="header-title">Чаты</span>
+      <button
+        type="button"
+        class="btn-stickers"
+        title="Стикеры"
+        @click="showStickers = true"
+      >
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <path fill="currentColor" d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2Zm-3.2 8.2a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4Zm6.4 0a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4ZM12 18c-2.4 0-4.4-1.4-5.2-3.4h10.4C16.4 16.6 14.4 18 12 18Z"/>
+        </svg>
+      </button>
     </div>
 
 
@@ -34,6 +44,7 @@
     </div>
 
     <UserSearch v-if="showSearch" @close="showSearch = false" />
+    <StickersManager v-if="showStickers" @close="showStickers = false" />
 
     <PhotoViewer
       v-if="viewerOpen"
@@ -95,11 +106,13 @@ import { getFileUrl } from '../services/files'
 import UserSearch from './UserSearch.vue'
 import PhotoViewer from './PhotoViewer.vue'
 import AvatarEqualizer from './AvatarEqualizer.vue'
+import StickersManager from './StickersManager.vue'
 
 const store = useChatStore()
 
 const chats = computed(() => store.chats)
 const showSearch = ref(false)
+const showStickers = ref(false)
 const viewerOpen = ref(false)
 const viewerItems = ref([])
 
@@ -161,6 +174,7 @@ function openChatAvatar(chat) {
 
 <style scoped>
 .sidebar {
+  position: relative;
   width: 300px;
   background: #fff;
   border-right: 1px solid #e7e7e7;
@@ -228,6 +242,24 @@ function openChatAvatar(chat) {
 .btn-profile :deep(.eq-wrap) {
   /* эквалайзер чуть больше кнопки */
   margin: -2px;
+}
+
+.btn-stickers {
+  border: none;
+  background: transparent;
+  color: #2aabee;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.btn-stickers:hover {
+  background: rgba(42, 171, 238, 0.1);
 }
 
 .header-title {

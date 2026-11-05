@@ -1,8 +1,7 @@
 /**
  * Клиент сервиса стикеров (chickchirick-stickers).
- *
- * Прокси Vite: /api/stickers → http://127.0.0.1:8087
- * Картинки стикеров лежат в files-сервисе (image_uuid).
+ * Прокси: /api/stickers → http://127.0.0.1:8087
+ * Создание паков/стикеров — под cookie access_token (авторизованный пользователь).
  */
 
 const PREFIX = '/api/stickers'
@@ -19,7 +18,7 @@ async function request(path, options = {}) {
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
-    const msg = data.error || `Stickers request failed: ${res.status}`
+    const msg = data.error || data.details || `Stickers request failed: ${res.status}`
     throw new Error(msg)
   }
   if (res.status === 204) return null
@@ -27,42 +26,58 @@ async function request(path, options = {}) {
   return data.payload !== undefined ? data.payload : data
 }
 
-/** Каталог опубликованных паков со стикерами. */
 export function fetchStickerPacks() {
   return request('/sticker-packs')
 }
 
-/** Один опубликованный пак. */
 export function fetchStickerPack(id) {
   return request(`/sticker-packs/${encodeURIComponent(id)}`)
 }
 
-/** Стикеры пака. */
 export function fetchPackStickers(packId) {
   return request(`/sticker-packs/${encodeURIComponent(packId)}/stickers`)
 }
 
-/** Установленные пользователем паки (нужна cookie access_token). */
 export function fetchInstalledPacks() {
   return request('/me/sticker-packs')
 }
 
-/** Установить пак себе. */
 export function installPack(packId) {
-  return request(`/sticker-packs/${encodeURIComponent(packId)}/install`, {
-    method: 'POST'
-  })
+  return request(`/sticker-packs/${encodeURIComponent(packId)}/install`, { method: 'POST' })
 }
 
-/** Убрать пак. */
 export function uninstallPack(packId) {
-  return request(`/sticker-packs/${encodeURIComponent(packId)}/install`, {
-    method: 'DELETE'
+  return request(`/sticker-packs/${encodeURIComponent(packId)}/install`, { method: 'DELETE' })
+}
+
+/** Создать набор (авторизованный пользователь). */
+export function createPack(body) {
+  return request('/sticker-packs', {
+    method: 'POST',
+    body: JSON.stringify(body)
   })
 }
 
-/** Имя файла-маркера, чтобы UI показал стикер как картинку. */
+/** Добавить стикер в набор (авторизованный пользователь). */
+export function createSticker(packId, body) {
+  return request(`/sticker-packs/${encodeURIComponent(packId)}/stickers`, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  })
+}
+
 export function stickerFileName(sticker) {
   const slug = (sticker?.slug || 'sticker').replace(/[^\w.-]+/g, '_')
   return `sticker-${slug}.webp`
+}
+
+export function slugify(text) {
+  return (
+    String(text || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80) || `pack-${Date.now()}`
+  )
 }

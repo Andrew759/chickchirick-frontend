@@ -66,7 +66,7 @@ const stickerPickerOpen = ref(false)
 const typingActive = ref(false)
 let typingHeartbeatTimer = null
 
-const emit = defineEmits(['send'])
+const emit = defineEmits(['send', 'typing'])
 
 const pendingIcon = computed(() => {
   const n = pendingFile.value?.name || ''
