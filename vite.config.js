@@ -25,6 +25,11 @@ export default defineConfig({
         target: 'http://127.0.0.1:8086',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/files/, '')
+      },
+      '/api/stickers': {
+        target: 'http://127.0.0.1:8087',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/stickers/, '')
       }
     }
   }

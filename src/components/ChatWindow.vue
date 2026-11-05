@@ -60,6 +60,7 @@ import { useChatStore } from '../stores/chat'
 import { sendMessage, sendTyping, requestDeleteMessage } from '../services/socket'
 import { uploadFile, linkFileToMessage, getFileUrl } from '../services/files'
 import { buildFileMessageText } from '../services/fileMarker'
+import { stickerFileName } from '../services/stickers'
 import {
   canEncryptFor,
   encryptForPeer,
@@ -177,11 +178,22 @@ async function maybeEncrypt(recipientId, plainText) {
 async function handleSend(payload) {
   const caption = (payload?.text || '').trim()
   const file = payload?.file || null
+  const sticker = payload?.sticker || null
   const recipientId = chat.value?.id
   if (!recipientId) return
-  if (!caption && !file) return
+  if (!caption && !file && !sticker) return
 
   await ensureE2eeReady(recipientId)
+
+  // Стикер: файл уже в files-сервисе (image_uuid), upload не нужен
+  if (sticker?.image_uuid) {
+    const fileUuid = sticker.image_uuid
+    const plain = buildFileMessageText(fileUuid, stickerFileName(sticker), '')
+    const text = await maybeEncrypt(recipientId, plain)
+    sendMessage({ recipientId, text })
+    waitAndLinkFile(fileUuid)
+    return
+  }
 
   if (!file) {
     const text = await maybeEncrypt(recipientId, caption)

@@ -1,5 +1,6 @@
 <template>
-  <div class="input-wrap">
+  <div class="input-wrap" style="position: relative">
+    <StickerPicker :open="stickerPickerOpen" @close="stickerPickerOpen = false" @select="onStickerSelect" />
     <div v-if="pendingFile" class="pending">
       <span class="pending-name" :title="pendingFile.name">
         {{ pendingIcon }} {{ pendingFile.name }}
@@ -11,6 +12,11 @@
       <button type="button" class="btn-video-note" title="Видеосообщение" @click="videoNoteOpen = true">
         <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">
           <path fill="currentColor" d="M4 7.5A2.5 2.5 0 0 1 6.5 5h6A2.5 2.5 0 0 1 15 7.5v.2l3.2-1.9A1.2 1.2 0 0 1 20 6.8v10.4a1.2 1.2 0 0 1-1.8 1L15 16.3v.2a2.5 2.5 0 0 1-2.5 2.5h-6A2.5 2.5 0 0 1 4 16.5v-9Z"/>
+        </svg>
+      </button>
+      <button type="button" class="btn-sticker" title="Стикеры" @click="stickerPickerOpen = !stickerPickerOpen">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path fill="currentColor" d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2Zm-3.2 8.2a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4Zm6.4 0a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4ZM12 18c-2.4 0-4.4-1.4-5.2-3.4h10.4C16.4 16.6 14.4 18 12 18Z"/>
         </svg>
       </button>
       <button type="button" class="btn-attach" title="Прикрепить файл" @click="fileInput?.click()">📎</button>
@@ -47,6 +53,7 @@
 import { ref, computed } from 'vue'
 import VideoNoteRecorder from './VideoNoteRecorder.vue'
 import VoiceRecorder from './VoiceRecorder.vue'
+import StickerPicker from './StickerPicker.vue'
 import { isAudioFilename, isImageFilename, isVideoFilename } from '../services/files'
 
 const text = ref('')
@@ -55,6 +62,7 @@ const fileInput = ref(null)
 const sending = ref(false)
 const videoNoteOpen = ref(false)
 const voiceRecorderOpen = ref(false)
+const stickerPickerOpen = ref(false)
 const typingActive = ref(false)
 let typingHeartbeatTimer = null
 
@@ -129,6 +137,11 @@ function onVoiceRecorded(file) {
   emit('send', { text: '', file, isVoiceMessage: true })
 }
 
+function onStickerSelect(sticker) {
+  if (!sticker?.image_uuid) return
+  emit('send', { text: '', sticker })
+}
+
 async function send() {
   stopTyping()
   const caption = text.value.trim()
@@ -155,6 +168,17 @@ async function send() {
   z-index: 5;
   padding-bottom: env(safe-area-inset-bottom);
   border-top: 1px solid rgba(42, 171, 238, .12);
+}
+
+.input-wrap {
+  /* for absolute sticker picker */
+}
+
+.btn-sticker {
+  color: #2aabee;
+  margin-right: 2px;
+  display: grid;
+  place-items: center;
 }
 
 .pending {
@@ -193,6 +217,7 @@ async function send() {
 }
 
 .btn-video-note,
+.btn-sticker,
 .btn-attach {
   border: none;
   background: transparent;
@@ -204,6 +229,12 @@ async function send() {
 .btn-video-note {
   color: #2aabee;
   margin-right: 4px;
+}
+
+.btn-sticker {
+  color: #2aabee;
+  display: grid;
+  place-items: center;
 }
 
 .input > input[type='text'],
