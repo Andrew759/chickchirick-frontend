@@ -488,6 +488,8 @@ watch(
 }
 
 /* Стикеры — без ореола/пузыря */
+.bubble.no-halo,
+.bubble.no-halo.me,
 .bubble.sticker,
 .bubble.sticker.me,
 .bubble.voice,
@@ -505,11 +507,19 @@ watch(
   max-width: 180px;
 }
 
+.bubble.no-halo .time,
 .bubble.sticker .time,
 .bubble.voice .time,
 .bubble.video-note .time {
   margin-top: 4px;
   padding-right: 2px;
+}
+
+/* не даём старым правилам :has(.video-note) вернуть padding */
+.bubble.no-halo:has(.video-note),
+.bubble.video-note:has(.video-note) {
+  padding: 0 !important;
+  background: transparent !important;
 }
 
 .bubble-row {

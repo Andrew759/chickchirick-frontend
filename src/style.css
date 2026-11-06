@@ -50,3 +50,477 @@ body {
     @apply bg-[#eef8ff];
   }
 }
+
+
+/* Messenger dark theme: shared surfaces and controls */
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --dm-bg: #0e1720;
+  --dm-panel: #17232f;
+  --dm-panel-raised: #1d2c39;
+  --dm-panel-soft: #223442;
+  --dm-border: #2b3d4c;
+  --dm-text: #e6edf3;
+  --dm-muted: #91a4b4;
+  --dm-accent: #55b8e8;
+}
+html[data-theme="dark"] body,
+html[data-theme="dark"] #app { background: var(--dm-bg) !important; color: var(--dm-text); }
+html[data-theme="dark"] .layout,
+html[data-theme="dark"] .panel-chat,
+html[data-theme="dark"] .main-column { background: var(--dm-bg) !important; color: var(--dm-text); }
+html[data-theme="dark"] .chat-window,
+html[data-theme="dark"] .chat-window > .header { background: var(--dm-panel) !important; color: var(--dm-text) !important; border-color: var(--dm-border) !important; }
+html[data-theme="dark"] .chat-window .chat-name,
+html[data-theme="dark"] .chat-window .chat-title,
+html[data-theme="dark"] .chat-window .typing-status { color: var(--dm-text) !important; }
+html[data-theme="dark"] .messages { background: var(--dm-bg) !important; }
+html[data-theme="dark"] .input-wrap,
+html[data-theme="dark"] .chat-window .input-wrap,
+html[data-theme="dark"] .chat-window textarea,
+html[data-theme="dark"] .chat-window input,
+html[data-theme="dark"] .message-input,
+html[data-theme="dark"] .search-input-wrap {
+  background: var(--dm-panel-raised) !important; color: var(--dm-text) !important; border-color: var(--dm-border) !important;
+}
+html[data-theme="dark"] input,
+html[data-theme="dark"] textarea { color: var(--dm-text); }
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder { color: #8195a5; }
+html[data-theme="dark"] .bubble:not(.me):not(.no-halo) .content,
+html[data-theme="dark"] .msg-bubble:not(.me):not(.no-halo) { background: #20313f !important; color: #e3edf5 !important; }
+html[data-theme="dark"] .msg-bubble.me:not(.no-halo),
+html[data-theme="dark"] .bubble.me:not(.no-halo) .content { background: #174968 !important; color: #eaf7ff !important; }
+html[data-theme="dark"] .global-player,
+html[data-theme="dark"] .audio-player,
+html[data-theme="dark"] .voice-message,
+html[data-theme="dark"] .picker-panel,
+html[data-theme="dark"] .sm-panel,
+html[data-theme="dark"] .profile-container,
+html[data-theme="dark"] .public-profile,
+html[data-theme="dark"] .search-panel {
+  background: var(--dm-panel) !important; color: var(--dm-text) !important; border-color: var(--dm-border) !important;
+}
+html[data-theme="dark"] .sm-overlay,
+html[data-theme="dark"] .picker,
+html[data-theme="dark"] .search-overlay,
+html[data-theme="dark"] .viewer-overlay,
+html[data-theme="dark"] .video-viewer-overlay,
+html[data-theme="dark"] .voice-overlay,
+html[data-theme="dark"] .video-note-overlay { background: rgba(3, 8, 13, .82) !important; }
+html[data-theme="dark"] .sm-head,
+html[data-theme="dark"] .picker-head,
+html[data-theme="dark"] .profile-header,
+html[data-theme="dark"] .section,
+html[data-theme="dark"] .music-row,
+html[data-theme="dark"] .photo-tile { border-color: var(--dm-border) !important; }
+html[data-theme="dark"] .sm-field,
+html[data-theme="dark"] .sm-emoji-input,
+html[data-theme="dark"] .sm-cell,
+html[data-theme="dark"] .sm-row,
+html[data-theme="dark"] .sticker,
+html[data-theme="dark"] .result { background: var(--dm-panel-raised) !important; color: var(--dm-text) !important; border-color: var(--dm-border) !important; }
+html[data-theme="dark"] .name,
+html[data-theme="dark"] .title,
+html[data-theme="dark"] .track-name,
+html[data-theme="dark"] .section-title,
+html[data-theme="dark"] .sm-title,
+html[data-theme="dark"] .pack-title { color: var(--dm-text) !important; }
+html[data-theme="dark"] .last,
+html[data-theme="dark"] .meta,
+html[data-theme="dark"] .hint,
+html[data-theme="dark"] .sm-hint,
+html[data-theme="dark"] .sm-sub,
+html[data-theme="dark"] .track-meta { color: var(--dm-muted) !important; }
+html[data-theme="dark"] button { color-scheme: dark; }
+html[data-theme="dark"] .auth-wrapper { background: var(--dm-bg) !important; }
+
+/* Reliable messenger theme overrides: target the components actually rendered. */
+html[data-theme="dark"] .app-shell,
+html[data-theme="dark"] .layout,
+html[data-theme="dark"] .main-column,
+html[data-theme="dark"] .panel-chat,
+html[data-theme="dark"] .panel-list {
+  background: #0e1720 !important;
+  color: #e6edf3 !important;
+}
+html[data-theme="dark"] .chat-window {
+  background: #0e1720 !important;
+  color: #e6edf3 !important;
+}
+html[data-theme="dark"] .chat-window > .header {
+  background: rgba(23, 35, 47, .96) !important;
+  color: #e6edf3 !important;
+  border-color: #2b3d4c !important;
+  box-shadow: none !important;
+}
+html[data-theme="dark"] .chat-window .chat-name,
+html[data-theme="dark"] .chat-window .chat-title,
+html[data-theme="dark"] .chat-window .typing-status,
+html[data-theme="dark"] .chat-window .text {
+  color: #e6edf3 !important;
+}
+html[data-theme="dark"] .chat-window .messages {
+  background-color: #0e1720 !important;
+  background-image: none !important;
+}
+html[data-theme="dark"] .chat-window .bubble:not(.me) {
+  background: #1d2c39 !important;
+  border-color: #2b3d4c !important;
+  color: #e6edf3 !important;
+}
+html[data-theme="dark"] .chat-window .bubble.me {
+  background: #174968 !important;
+  border-color: #245c7c !important;
+  color: #eaf7ff !important;
+}
+/* Вложения без голубого ореола/пузыря в тёмной теме */
+html[data-theme="dark"] .chat-window .bubble.no-halo,
+html[data-theme="dark"] .chat-window .bubble.no-halo.me,
+html[data-theme="dark"] .chat-window .bubble.sticker,
+html[data-theme="dark"] .chat-window .bubble.sticker.me,
+html[data-theme="dark"] .chat-window .bubble.voice,
+html[data-theme="dark"] .chat-window .bubble.voice.me,
+html[data-theme="dark"] .chat-window .bubble.video-note,
+html[data-theme="dark"] .chat-window .bubble.video-note.me {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+html[data-theme="dark"] .chat-window .bubble .content,
+html[data-theme="dark"] .chat-window .bubble .text { color: inherit !important; }
+html[data-theme="dark"] .chat-window .time { color: #91a4b4 !important; }
+html[data-theme="dark"] .input-wrap {
+  background: #17232f !important;
+  border-color: #2b3d4c !important;
+}
+html[data-theme="dark"] .input-wrap .input > input,
+html[data-theme="dark"] .input-wrap input,
+html[data-theme="dark"] .input-wrap textarea {
+  background: #223442 !important;
+  color: #e6edf3 !important;
+  border: 1px solid #34495a !important;
+}
+html[data-theme="dark"] .input-wrap input::placeholder,
+html[data-theme="dark"] .input-wrap textarea::placeholder { color: #91a4b4 !important; }
+html[data-theme="dark"] .sidebar {
+  background: #111b25 !important;
+  border-color: #2b3d4c !important;
+  color: #e6edf3 !important;
+}
+html[data-theme="dark"] .sidebar .header { background: #17232f !important; border-color: #2b3d4c !important; }
+html[data-theme="dark"] .sidebar .header-title,
+html[data-theme="dark"] .sidebar .name { color: #e6edf3 !important; }
+html[data-theme="dark"] .sidebar .chat-toolbar { border-color: #2b3d4c !important; }
+html[data-theme="dark"] .sidebar .toolbar-tab,
+html[data-theme="dark"] .sidebar .toolbar-action { color: #a9bdcc !important; }
+html[data-theme="dark"] .sidebar .toolbar-tab.active { color: #75ccf8 !important; background: #17364a !important; }
+html[data-theme="dark"] .sidebar .toolbar-tab:hover,
+html[data-theme="dark"] .sidebar .toolbar-action:hover { color: #75ccf8 !important; background: #203747 !important; }
+html[data-theme="dark"] .sidebar .search-bar { background: #202f3d !important; }
+html[data-theme="dark"] .sidebar .search-input { color: #e6edf3 !important; }
+html[data-theme="dark"] .sidebar .search-input::placeholder { color: #91a4b4 !important; }
+html[data-theme="dark"] .sidebar .chat { color: #dce6ee !important; border-color: #263746 !important; }
+html[data-theme="dark"] .sidebar .chat:hover { background: #1b2b38 !important; }
+html[data-theme="dark"] .sidebar .chat.active { background: #18384b !important; }
+html[data-theme="dark"] .sidebar .last,
+html[data-theme="dark"] .sidebar .time,
+html[data-theme="dark"] .sidebar .no-chats,
+html[data-theme="dark"] .sidebar .search-hint { color: #91a4b4 !important; }
+html[data-theme="dark"] .theme-settings { background: #1b2a37 !important; border-color: #34495a !important; color: #e6edf3 !important; }
+html[data-theme="dark"] .theme-settings-title { color: #e6edf3 !important; }
+html[data-theme="dark"] .theme-option { background: #223442 !important; color: #c2d0dc !important; border-color: #3a4d5c !important; }
+html[data-theme="dark"] .theme-option.active { background: #173b50 !important; color: #75ccf8 !important; border-color: #348bb8 !important; }
+
+
+
+/* === Complete dark-theme contrast pass (all Vue feature panels) === */
+html[data-theme="dark"] {
+  --dm-bg: #0e1720;
+  --dm-panel: #17232f;
+  --dm-panel-raised: #1d2c39;
+  --dm-panel-soft: #223442;
+  --dm-border: #304454;
+  --dm-text: #f1f5f9;
+  --dm-muted: #c0ccd6;
+  --dm-accent: #55b8e8;
+}
+html[data-theme="dark"] body,
+html[data-theme="dark"] #app,
+html[data-theme="dark"] .app-shell,
+html[data-theme="dark"] .layout,
+html[data-theme="dark"] .main-column,
+html[data-theme="dark"] .panel-chat,
+html[data-theme="dark"] .panel-list,
+html[data-theme="dark"] .chat-window,
+html[data-theme="dark"] .messages,
+html[data-theme="dark"] .empty {
+  background-color: var(--dm-bg) !important;
+  color: var(--dm-text) !important;
+}
+
+/* Sidebar, headers, navigation and search */
+html[data-theme="dark"] .sidebar,
+html[data-theme="dark"] .sidebar .header,
+html[data-theme="dark"] .chat-window > .header,
+html[data-theme="dark"] .chat-toolbar,
+html[data-theme="dark"] .search-bar,
+html[data-theme="dark"] .search-bar:hover,
+html[data-theme="dark"] .search-bar.focused {
+  background: var(--dm-panel) !important;
+  color: var(--dm-text) !important;
+  border-color: var(--dm-border) !important;
+}
+html[data-theme="dark"] .header-title,
+html[data-theme="dark"] .chat-title,
+html[data-theme="dark"] .chat-name,
+html[data-theme="dark"] .sidebar .name,
+html[data-theme="dark"] .sidebar .chat,
+html[data-theme="dark"] .profile-container,
+html[data-theme="dark"] .public-profile {
+  color: var(--dm-text) !important;
+}
+html[data-theme="dark"] .search-input,
+html[data-theme="dark"] .sidebar input,
+html[data-theme="dark"] .sidebar textarea {
+  color: var(--dm-text) !important;
+  background: transparent !important;
+}
+html[data-theme="dark"] .search-input::placeholder,
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+  color: #b2c0cc !important;
+  opacity: 1;
+}
+html[data-theme="dark"] .chat .last,
+html[data-theme="dark"] .chat .time,
+html[data-theme="dark"] .search-result .last,
+html[data-theme="dark"] .profile-loading,
+html[data-theme="dark"] .profile-error,
+html[data-theme="dark"] .music-empty,
+html[data-theme="dark"] .track-meta,
+html[data-theme="dark"] .track-hint,
+html[data-theme="dark"] .login,
+html[data-theme="dark"] .state,
+html[data-theme="dark"] .state.muted,
+html[data-theme="dark"] .sm-hint,
+html[data-theme="dark"] .sm-sub,
+html[data-theme="dark"] .hint,
+html[data-theme="dark"] .meta,
+html[data-theme="dark"] .info-group,
+html[data-theme="dark"] .info-group label {
+  color: var(--dm-muted) !important;
+}
+
+/* Profile and public profile panels: remove hard-coded white surfaces and dim grey text. */
+html[data-theme="dark"] .profile-container,
+html[data-theme="dark"] .public-profile,
+html[data-theme="dark"] .profile-header,
+html[data-theme="dark"] .profile-content,
+html[data-theme="dark"] .profile-info,
+html[data-theme="dark"] .section,
+html[data-theme="dark"] .music-row,
+html[data-theme="dark"] .photos-grid,
+html[data-theme="dark"] .photo-tile,
+html[data-theme="dark"] .music-list {
+  background: var(--dm-panel) !important;
+  color: var(--dm-text) !important;
+  border-color: var(--dm-border) !important;
+}
+html[data-theme="dark"] .profile-container *,
+html[data-theme="dark"] .public-profile * {
+  border-color: var(--dm-border);
+}
+html[data-theme="dark"] .profile-container .section-title,
+html[data-theme="dark"] .public-profile .section-title,
+html[data-theme="dark"] .profile-container .name,
+html[data-theme="dark"] .public-profile .name,
+html[data-theme="dark"] .profile-container .track-name,
+html[data-theme="dark"] .public-profile .track-name,
+html[data-theme="dark"] .profile-container .add-label {
+  color: var(--dm-text) !important;
+}
+html[data-theme="dark"] .profile-container input,
+html[data-theme="dark"] .profile-container textarea,
+html[data-theme="dark"] .public-profile input,
+html[data-theme="dark"] .public-profile textarea,
+html[data-theme="dark"] .profile-container .info-group input {
+  background: #223442 !important;
+  color: #f1f5f9 !important;
+  border-color: #526575 !important;
+}
+html[data-theme="dark"] .profile-container input::placeholder,
+html[data-theme="dark"] .profile-container textarea::placeholder {
+  color: #c0ccd6 !important;
+}
+
+/* Sticker manager, picker, upload forms and dialogs */
+html[data-theme="dark"] .sm-panel,
+html[data-theme="dark"] .picker-panel,
+html[data-theme="dark"] .picker,
+html[data-theme="dark"] .sm-head,
+html[data-theme="dark"] .picker-head,
+html[data-theme="dark"] .sm-body,
+html[data-theme="dark"] .sm-row,
+html[data-theme="dark"] .sm-field,
+html[data-theme="dark"] .sm-emoji-input,
+html[data-theme="dark"] .sm-emoji-sheet,
+html[data-theme="dark"] .sm-cell,
+html[data-theme="dark"] .pack,
+html[data-theme="dark"] .result,
+html[data-theme="dark"] .tab,
+html[data-theme="dark"] .sm-tab {
+  background: var(--dm-panel) !important;
+  color: var(--dm-text) !important;
+  border-color: var(--dm-border) !important;
+}
+html[data-theme="dark"] .sm-name,
+html[data-theme="dark"] .sm-title,
+html[data-theme="dark"] .pack-title,
+html[data-theme="dark"] .sm-pack-bar-title,
+html[data-theme="dark"] .sm-emoji-sheet-title,
+html[data-theme="dark"] .sm-row-text,
+html[data-theme="dark"] .sm-file-label {
+  color: var(--dm-text) !important;
+}
+html[data-theme="dark"] .sm-panel input,
+html[data-theme="dark"] .sm-panel textarea,
+html[data-theme="dark"] .picker input,
+html[data-theme="dark"] .picker textarea {
+  background: var(--dm-panel-raised) !important;
+  color: var(--dm-text) !important;
+  border-color: var(--dm-border) !important;
+}
+html[data-theme="dark"] .sm-panel input::placeholder,
+html[data-theme="dark"] .sm-panel textarea::placeholder {
+  color: #b2c0cc !important;
+}
+
+/* Message composition, voice/audio players and media controls */
+html[data-theme="dark"] .input-wrap,
+html[data-theme="dark"] .input-wrap .input,
+html[data-theme="dark"] .input-wrap .input > input,
+html[data-theme="dark"] .input-wrap input,
+html[data-theme="dark"] .input-wrap textarea,
+html[data-theme="dark"] .pending,
+html[data-theme="dark"] .audio-player,
+html[data-theme="dark"] .voice-message,
+html[data-theme="dark"] .global-player,
+html[data-theme="dark"] .mini-player,
+html[data-theme="dark"] .track-row {
+  background: var(--dm-panel-raised) !important;
+  color: var(--dm-text) !important;
+  border-color: var(--dm-border) !important;
+}
+html[data-theme="dark"] .input-wrap *,
+html[data-theme="dark"] .audio-player *,
+html[data-theme="dark"] .voice-message *,
+html[data-theme="dark"] .global-player *,
+html[data-theme="dark"] .mini-player * {
+  color: inherit;
+}
+html[data-theme="dark"] .message-input,
+html[data-theme="dark"] .input-wrap input,
+html[data-theme="dark"] .input-wrap textarea {
+  color: var(--dm-text) !important;
+  caret-color: var(--dm-accent);
+}
+html[data-theme="dark"] .bubble:not(.me),
+html[data-theme="dark"] .msg-bubble:not(.me) {
+  background: #1d2c39 !important;
+  color: var(--dm-text) !important;
+  border-color: var(--dm-border) !important;
+}
+html[data-theme="dark"] .bubble.me,
+html[data-theme="dark"] .msg-bubble.me {
+  background: #174968 !important;
+  color: #f1f8fc !important;
+}
+/* Вложения без голубого ореола — перекрываем !important выше */
+html[data-theme="dark"] .bubble.no-halo,
+html[data-theme="dark"] .bubble.no-halo.me,
+html[data-theme="dark"] .bubble.sticker,
+html[data-theme="dark"] .bubble.sticker.me,
+html[data-theme="dark"] .bubble.voice,
+html[data-theme="dark"] .bubble.voice.me,
+html[data-theme="dark"] .bubble.video-note,
+html[data-theme="dark"] .bubble.video-note.me,
+html[data-theme="dark"] .msg-bubble.no-halo,
+html[data-theme="dark"] .msg-bubble.no-halo.me {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+html[data-theme="dark"] .bubble .content,
+html[data-theme="dark"] .bubble .text,
+html[data-theme="dark"] .msg-bubble .content {
+  color: inherit !important;
+}
+
+/* Common muted text classes across components should remain readable, not charcoal-grey. */
+html[data-theme="dark"] .muted,
+html[data-theme="dark"] .subtitle,
+html[data-theme="dark"] .description,
+html[data-theme="dark"] .file-name,
+html[data-theme="dark"] .track-hint,
+html[data-theme="dark"] .pending-name,
+html[data-theme="dark"] .message-time,
+html[data-theme="dark"] .timestamp,
+html[data-theme="dark"] .caption,
+html[data-theme="dark"] small {
+  color: #c0ccd6 !important;
+}
+
+/* Preserve semantic accents and readable danger states. */
+html[data-theme="dark"] .error,
+html[data-theme="dark"] .media-error { color: #ff8297 !important; }
+html[data-theme="dark"] a,
+html[data-theme="dark"] .accent { color: #75ccf8; }
+html[data-theme="dark"] button:focus-visible,
+html[data-theme="dark"] input:focus-visible,
+html[data-theme="dark"] textarea:focus-visible {
+  outline-color: #55b8e8 !important;
+}
+
+/* —— Убираем голубой ореол по бокам (слева/справа), заменяем на тёмный акцент —— */
+html[data-theme="dark"] .profile-overlay {
+  box-shadow: -10px 0 28px rgba(0, 0, 0, 0.35) !important;
+}
+html[data-theme="dark"] .sidebar {
+  border-right-color: #243442 !important;
+  box-shadow: none !important;
+}
+html[data-theme="dark"] .panel-list {
+  border-right-color: #243442 !important;
+  box-shadow: none !important;
+}
+html[data-theme="dark"] .chat-window,
+html[data-theme="dark"] .chat-window .messages,
+html[data-theme="dark"] .main-column,
+html[data-theme="dark"] .panel-chat {
+  background-color: #0e1720 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+/* Голубые тени из ChatWindow.vue (header, bubbles) → нейтральные/тёмные в dark */
+html[data-theme="dark"] .chat-window > .header {
+  border-bottom-color: #2b3d4c !important;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25) !important;
+}
+html[data-theme="dark"] .chat-window .bubble:not(.no-halo):not(.sticker):not(.voice):not(.video-note) {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22) !important;
+  border-color: #2b3d4c !important;
+}
+html[data-theme="dark"] .chat-window .bubble.me:not(.no-halo):not(.sticker):not(.voice):not(.video-note) {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28) !important;
+  border-color: #245c7c !important;
+}
+/* Индикатор активного чата слева — тёмный акцент вместо яркого голубого ореола */
+html[data-theme="dark"] .sidebar .chat.active {
+  box-shadow: inset 3px 0 0 #3d8eb8 !important;
+  background: #18384b !important;
+}

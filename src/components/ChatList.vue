@@ -58,11 +58,12 @@
         class="toolbar-action"
         title="Загрузить стикеры"
         aria-label="Загрузить стикеры"
-        @click="showStickers = true"
+        @click="openStickers"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8a9.2 9.2 0 1 0 9.2 9.2V9.5A6.7 6.7 0 0 0 14.5 2.8Z"/><path d="M14.5 2.8v6.7h6.7M8.5 10h.01M15.5 10h.01M8.5 15c1.8 2 5.2 2 7 0"/></svg>
       </button>
     </nav>
+
 
     <!-- Поиск всегда сверху -->
     <div class="search-bar" :class="{ focused: searchFocused || searchQuery }">
@@ -198,6 +199,9 @@ const store = useChatStore()
 const chats = computed(() => store.chats)
 const chatFilter = ref('direct')
 
+
+
+
 function chatKind(chat) {
   const type = String(chat?.type || chat?.chatType || chat?.chat_type || '').toLowerCase()
   if (chat?.isChannel === true || chat?.is_channel === true ||
@@ -214,6 +218,10 @@ const visibleChats = computed(() => chats.value.filter((chat) =>
 ))
 
 const showStickers = ref(false)
+
+function openStickers() {
+  showStickers.value = true
+}
 const viewerOpen = ref(false)
 const viewerItems = ref([])
 
@@ -418,7 +426,8 @@ function openChatAvatar(chat) {
 </script>
 
 <style scoped>
-.sidebar {
+
+ .sidebar {
   position: relative;
   width: 300px;
   background: #fff;
@@ -492,8 +501,8 @@ function openChatAvatar(chat) {
 .chat-toolbar {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 8px 10px;
+  gap: 3px;
+  padding: 8px 8px;
   border-bottom: 1px solid #f0f0f0;
   flex-shrink: 0;
 }
@@ -508,7 +517,7 @@ function openChatAvatar(chat) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 3px;
   cursor: pointer;
   transition: background .15s ease, color .15s ease;
 }
@@ -516,16 +525,16 @@ function openChatAvatar(chat) {
 .toolbar-tab {
   flex: 1 1 0;
   min-width: 0;
-  padding: 0 7px;
-  font-size: 12px;
+  padding: 0 2px;
+  font-size: 10px;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .toolbar-tab svg,
 .toolbar-action svg {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.7;
@@ -535,8 +544,8 @@ function openChatAvatar(chat) {
 }
 
 .toolbar-action {
-  flex: 0 0 34px;
-  width: 34px;
+  flex: 0 0 30px;
+  width: 30px;
   padding: 0;
 }
 
@@ -812,4 +821,33 @@ function openChatAvatar(chat) {
     height: 52px;
   }
 }
+</style>
+
+<style>
+:global(html[data-theme="dark"]) .sidebar { background:#111b25; border-color:#263746; }
+:global(html[data-theme="dark"]) .sidebar .header { background:#17232f; border-color:#263746; }
+:global(html[data-theme="dark"]) .sidebar .header-title,
+:global(html[data-theme="dark"]) .sidebar .name { color:#e6edf3; }
+:global(html[data-theme="dark"]) .sidebar .chat-toolbar { border-color:#263746; }
+:global(html[data-theme="dark"]) .sidebar .toolbar-tab,
+:global(html[data-theme="dark"]) .sidebar .toolbar-action { color:#9aafbf; }
+:global(html[data-theme="dark"]) .sidebar .toolbar-tab.active { color:#65c5f5; background:#17364a; }
+:global(html[data-theme="dark"]) .sidebar .toolbar-tab:hover,
+:global(html[data-theme="dark"]) .sidebar .toolbar-action:hover { color:#65c5f5; background:#203747; }
+:global(html[data-theme="dark"]) .sidebar .search-bar { background:#202f3d; }
+:global(html[data-theme="dark"]) .sidebar .search-bar:hover,
+:global(html[data-theme="dark"]) .sidebar .search-bar.focused { background:#263b4d; }
+:global(html[data-theme="dark"]) .sidebar .search-input { color:#e6edf3; }
+:global(html[data-theme="dark"]) .sidebar .search-input::placeholder { color:#8195a5; }
+:global(html[data-theme="dark"]) .sidebar .chat { color:#dce6ee; border-color:#263746; }
+:global(html[data-theme="dark"]) .sidebar .chat:hover { background:#1b2b38; }
+:global(html[data-theme="dark"]) .sidebar .chat.active { background:#18384b; }
+:global(html[data-theme="dark"]) .sidebar .last,
+:global(html[data-theme="dark"]) .sidebar .time,
+:global(html[data-theme="dark"]) .sidebar .no-chats,
+:global(html[data-theme="dark"]) .sidebar .search-hint { color:#91a4b4; }
+:global(html[data-theme="dark"]) .theme-settings { background:#1b2a37; border-color:#34495a; }
+:global(html[data-theme="dark"]) .theme-settings-title { color:#e6edf3; }
+:global(html[data-theme="dark"]) .theme-option { background:#223442; color:#c2d0dc; border-color:#3a4d5c; }
+:global(html[data-theme="dark"]) .theme-option.active { background:#173b50; color:#75ccf8; border-color:#348bb8; }
 </style>

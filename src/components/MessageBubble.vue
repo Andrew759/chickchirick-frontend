@@ -5,7 +5,8 @@
       msg.fromMe ? 'me' : '',
       isSticker ? 'sticker' : '',
       msg.isVoiceMessage ? 'voice' : '',
-      msg.isVideoNote ? 'video-note' : ''
+      msg.isVideoNote ? 'video-note' : '',
+      noHalo ? 'no-halo' : ''
     ]"
   >
     <div class="bubble-row">
@@ -126,6 +127,15 @@ const isSticker = computed(() => {
   return /^sticker-/i.test(name) || props.msg.isSticker === true
 })
 
+/** Вложения без голубого пузыря: стикер, голос, видеокружок, фото, видео, файл */
+const noHalo = computed(() => {
+  if (!props.msg.fileUuid) return false
+  if (isSticker.value) return true
+  if (props.msg.isVoiceMessage || props.msg.isVideoNote) return true
+  if (props.msg.isImage || props.msg.isVideo || props.msg.isAudio) return true
+  return true
+})
+
 function onStickerClick() {
   emit('open-sticker', props.msg)
   // fallback: если родитель не слушает open-sticker
@@ -164,7 +174,9 @@ const displayText = computed(() => {
   background: linear-gradient(135deg, #dff6ff, #c9efff);
 }
 
-/* Стикер / голос / видеокружок — без голубого пузыря */
+/* Вложения — без голубого пузыря */
+.bubble.no-halo,
+.bubble.no-halo.me,
 .bubble.sticker,
 .bubble.voice,
 .bubble.video-note {
@@ -172,24 +184,26 @@ const displayText = computed(() => {
   border: none !important;
   box-shadow: none !important;
   padding: 0 !important;
+  border-radius: 0 !important;
 }
 
 .bubble.sticker {
   max-width: 180px;
 }
 
-.bubble.sticker.me,
-.bubble.voice.me,
-.bubble.video-note.me {
-  background: transparent !important;
-}
-
+.bubble.no-halo .time,
 .bubble.sticker .time,
 .bubble.voice .time,
 .bubble.video-note .time {
   margin-top: 4px;
   padding-right: 2px;
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+}
+
+.bubble.no-halo .msg-image,
+.bubble.no-halo .msg-video-preview {
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
 }
 
 .msg-sticker {

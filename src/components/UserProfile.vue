@@ -180,6 +180,35 @@
         </div>
       </div>
 
+      <div class="section theme-section">
+        <div class="section-header">
+          <span class="section-title">Тема интерфейса</span>
+        </div>
+        <div class="theme-choice">
+          <button
+            type="button"
+            class="theme-card"
+            :class="{ selected: theme === 'light' }"
+            @click="setTheme('light')"
+          >
+            <span class="theme-preview">☀</span>
+            <span>Светлая</span>
+            <span v-if="theme === 'light'" class="theme-check">✓</span>
+          </button>
+          <button
+            type="button"
+            class="theme-card"
+            :class="{ selected: theme === 'dark' }"
+            @click="setTheme('dark')"
+          >
+            <span class="theme-preview dark-preview">☾</span>
+            <span>Тёмная</span>
+            <span v-if="theme === 'dark'" class="theme-check">✓</span>
+          </button>
+        </div>
+        <p class="theme-help">Выберите оформление, которое будет использоваться во всём мессенджере.</p>
+      </div>
+
       <button class="btn-logout" type="button" :disabled="isLoggingOut" @click="handleLogout">
         {{ isLoggingOut ? 'Выход...' : 'Выйти' }}
       </button>
@@ -217,6 +246,17 @@ const user = ref({})
 const isLoading = ref(true)
 const error = ref(null)
 const isLoggingOut = ref(false)
+
+const theme = ref(localStorage.getItem('messenger-theme') === 'dark' ? 'dark' : 'light')
+
+function setTheme(value) {
+  theme.value = value
+  document.documentElement.dataset.theme = value
+  localStorage.setItem('messenger-theme', value)
+}
+
+// синхронизация при открытии профиля
+document.documentElement.dataset.theme = theme.value
 
 const userServiceId = ref(null)
 /** @type {import('vue').Ref<Array<{ id: number, fileUuid: string, kind: string, fileName: string }>>} */
@@ -885,6 +925,89 @@ onMounted(() => {
   margin: 0;
   font-size: 15px;
   color: #333;
+}
+
+.theme-section {
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.theme-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.theme-card {
+  position: relative;
+  min-height: 92px;
+  border: 1px solid #dce6ee;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #526579;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 12px 8px;
+}
+
+.theme-card.selected {
+  border: 2px solid #2aabee;
+  background: #edf8ff;
+  color: #168dcc;
+  font-weight: 700;
+}
+
+.theme-preview {
+  font-size: 25px;
+  line-height: 1;
+}
+
+.dark-preview {
+  color: #2aabee;
+}
+
+.theme-check {
+  position: absolute;
+  right: 7px;
+  top: 6px;
+  color: #fff;
+  background: #2aabee;
+  border-radius: 50%;
+  width: 19px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+}
+
+.theme-help {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #8293a3;
+  margin: 12px 0 0;
+}
+
+:global(html[data-theme="dark"]) .theme-card {
+  background: #1c2c39;
+  color: #c5d1dc;
+  border-color: #3a4d5c;
+}
+
+:global(html[data-theme="dark"]) .theme-card.selected {
+  background: #173b50;
+  color: #75ccf8;
+  border-color: #2aabee;
+}
+
+:global(html[data-theme="dark"]) .theme-help {
+  color: #b4c2ce;
 }
 
 .btn-logout {

@@ -54,6 +54,10 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+
+// тема до первого рендера панелей
+const _savedTheme = localStorage.getItem('messenger-theme') === 'dark' ? 'dark' : 'light'
+document.documentElement.dataset.theme = _savedTheme
 import { connectSocket, subscribe } from './services/socket'
 import {
   resolveChatUsers,
