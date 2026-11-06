@@ -60,9 +60,26 @@
           <span v-if="passwordMismatch" class="field-error">Пароли не совпадают</span>
         </div>
 
+        <div class="form-group consent-group">
+          <label class="consent-row">
+            <input v-model="consentPersonalData" type="checkbox" class="consent-checkbox" @change="consentError = ''" />
+            <span class="consent-ui" aria-hidden="true"></span>
+            <span class="consent-text">
+              Я даю согласие на обработку введённых данных, приложением chickchirick и осознаю, что chickchirick не
+              гарантирует соответствие этих данных — данным, являющимся конфиденциальными, или данным, являющимися
+              персональными данными.
+            </span>
+          </label>
+          <span v-if="consentError" class="field-error consent-error">{{ consentError }}</span>
+        </div>
+
         <div class="btn-group">
           <button type="button" class="btn-prev" @click="prevStep">Назад</button>
-          <button type="submit" class="btn-submit" :disabled="isLoading || passwordMismatch">
+          <button
+            type="submit"
+            class="btn-submit"
+            :disabled="isLoading || passwordMismatch || !consentPersonalData"
+          >
             {{ isLoading ? 'Регистрация...' : 'Завершить' }}
           </button>
         </div>
@@ -90,6 +107,8 @@ const isLoading = ref(false)
 const errorMessage = ref('')
 const confirmPassword = ref('')
 const visiblePhone = ref('')
+const consentPersonalData = ref(false)
+const consentError = ref('')
 
 const formData = ref({
   name: '',
@@ -155,6 +174,11 @@ function prevStep() {
 
 async function handleSubmit() {
   if (passwordMismatch.value) return
+  if (!consentPersonalData.value) {
+    consentError.value = 'Нужно согласие на обработку персональных данных'
+    return
+  }
+  consentError.value = ''
 
   isLoading.value = true
   errorMessage.value = ''
@@ -221,7 +245,7 @@ h2 {
 }
 
 .form-group {
-  margin-bottom: 15px;
+  margin-bottom: 18px;
   position: relative;
 }
 
@@ -247,10 +271,11 @@ input:focus {
 
 .field-error {
   color: #ea0038;
-  font-size: 11px;
-  position: absolute;
-  bottom: -15px;
-  left: 0;
+  font-size: 12px;
+  display: block;
+  position: static;
+  margin-top: 6px;
+  line-height: 1.3;
 }
 
 button {
@@ -276,6 +301,7 @@ button:disabled {
 .btn-group {
   display: flex;
   gap: 10px;
+  margin-top: 4px;
 }
 
 .btn-prev {
@@ -310,6 +336,96 @@ button:disabled {
 
 .link-btn:hover {
   text-decoration: underline;
+}
+
+
+.consent-group {
+  margin-top: 6px;
+  margin-bottom: 20px;
+}
+
+.consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+}
+
+.consent-checkbox {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.consent-ui {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 5px;
+  border: 2px solid #94a3b8;
+  background: #fff;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.consent-ui::after {
+  content: '';
+  width: 10px;
+  height: 6px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) translate(1px, -1px) scale(0);
+  transition: transform 0.12s ease;
+}
+
+.consent-checkbox:checked + .consent-ui {
+  border-color: #2aabee;
+  background: linear-gradient(135deg, #38bdf8, #2aabee);
+}
+
+.consent-checkbox:checked + .consent-ui::after {
+  transform: rotate(-45deg) translate(1px, -1px) scale(1);
+}
+
+.consent-checkbox:focus-visible + .consent-ui {
+  box-shadow: 0 0 0 3px rgba(42, 171, 238, 0.25);
+}
+
+.consent-row:hover .consent-ui {
+  border-color: #2aabee;
+}
+
+.consent-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.consent-link {
+  color: #2aabee;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.consent-link:hover {
+  text-decoration: underline;
+}
+
+.consent-error {
+  margin-top: 8px;
+}
+
+.btn-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 @media (max-width: 768px) {
