@@ -427,19 +427,20 @@ watch(
   box-shadow: 0 2px 10px rgba(42, 171, 238, .09);
 }
 
-.bubble.me::before {
-  content: '';
-  position: absolute;
-  left: 10px;
-  top: 3px;
-  width: 2px;
-  height: 2px;
-  border-radius: 2px;
-  background: #2aabee;
-  box-shadow:
-    4px 0 0 #38bdf8,
-    8px 0 0 #7dd3fc;
-  opacity: .55;
+/* Стикеры — без ореола/пузыря */
+.bubble.sticker,
+.bubble.sticker.me {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  max-width: 180px;
+}
+
+.bubble.sticker .time {
+  margin-top: 4px;
+  padding-right: 2px;
 }
 
 .bubble-row {

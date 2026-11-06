@@ -1,10 +1,24 @@
 <template>
-  <div :class="['bubble', msg.fromMe ? 'me' : '']">
+  <div :class="['bubble', msg.fromMe ? 'me' : '', isSticker ? 'sticker' : '']">
     <div class="bubble-row">
       <div class="content">
         <div v-if="msg.fileUuid" class="attachment">
           <button
-            v-if="msg.isImage"
+            v-if="isSticker"
+            type="button"
+            class="img-link sticker-link"
+            @click.stop
+          >
+            <img
+              :src="fileUrl"
+              :alt="msg.fileName || 'sticker'"
+              class="msg-sticker"
+              loading="lazy"
+              draggable="false"
+            />
+          </button>
+          <button
+            v-else-if="msg.isImage"
             type="button"
             class="img-link"
             @click.stop="$emit('open-photo', msg)"
@@ -132,6 +146,43 @@ const displayText = computed(() => {
 .bubble.me {
   align-self: flex-end;
   background: linear-gradient(135deg, #dff6ff, #c9efff);
+}
+
+/* Стикер: без пузыря, только картинка и время */
+.bubble.sticker {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  max-width: 180px;
+}
+
+.bubble.sticker.me {
+  background: transparent !important;
+}
+
+.bubble.sticker .time {
+  margin-top: 4px;
+  padding-right: 2px;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+.msg-sticker {
+  width: 160px;
+  height: 160px;
+  object-fit: contain;
+  display: block;
+  border-radius: 0;
+  background: transparent;
+}
+
+.sticker-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: default;
+  display: block;
+  line-height: 0;
 }
 
 .bubble-row {
