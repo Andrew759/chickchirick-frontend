@@ -1,5 +1,13 @@
 <template>
-  <div :class="['bubble', msg.fromMe ? 'me' : '', isSticker ? 'sticker' : '']">
+  <div
+    :class="[
+      'bubble',
+      msg.fromMe ? 'me' : '',
+      isSticker ? 'sticker' : '',
+      msg.isVoiceMessage ? 'voice' : '',
+      msg.isVideoNote ? 'video-note' : ''
+    ]"
+  >
     <div class="bubble-row">
       <div class="content">
         <div v-if="msg.fileUuid" class="attachment">
@@ -7,7 +15,7 @@
             v-if="isSticker"
             type="button"
             class="img-link sticker-link"
-            @click.stop
+            @click.stop="onStickerClick"
           >
             <img
               :src="fileUrl"
@@ -106,15 +114,23 @@ const props = defineProps({
   queue: { type: Array, default: () => [] }
 })
 
-defineEmits(['open-photo', 'open-video', 'delete'])
+const emit = defineEmits(['open-photo', 'open-video', 'open-sticker', 'delete'])
 
 const fileUrl = computed(() => getFileUrl(props.msg.fileUuid))
 const timeLabel = computed(() => formatMessageTime(props.msg.createdAt) || '·')
 
 /** Стикер: caption (эмодзи) под картинкой не показываем */
-const isSticker = computed(() =>
-  !!props.msg.fileUuid && /^sticker-/i.test(props.msg.fileName || '')
-)
+const isSticker = computed(() => {
+  if (!props.msg.fileUuid) return false
+  const name = props.msg.fileName || ''
+  return /^sticker-/i.test(name) || props.msg.isSticker === true
+})
+
+function onStickerClick() {
+  emit('open-sticker', props.msg)
+  // fallback: если родитель не слушает open-sticker
+  emit('open-photo', props.msg)
+}
 
 const showText = computed(() => {
   if (isSticker.value) return false
@@ -148,20 +164,29 @@ const displayText = computed(() => {
   background: linear-gradient(135deg, #dff6ff, #c9efff);
 }
 
-/* Стикер: без пузыря, только картинка и время */
-.bubble.sticker {
+/* Стикер / голос / видеокружок — без голубого пузыря */
+.bubble.sticker,
+.bubble.voice,
+.bubble.video-note {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
   padding: 0 !important;
+}
+
+.bubble.sticker {
   max-width: 180px;
 }
 
-.bubble.sticker.me {
+.bubble.sticker.me,
+.bubble.voice.me,
+.bubble.video-note.me {
   background: transparent !important;
 }
 
-.bubble.sticker .time {
+.bubble.sticker .time,
+.bubble.voice .time,
+.bubble.video-note .time {
   margin-top: 4px;
   padding-right: 2px;
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
@@ -177,10 +202,11 @@ const displayText = computed(() => {
 }
 
 .sticker-link {
+  position: relative;
   border: none;
   background: transparent;
   padding: 0;
-  cursor: default;
+  cursor: pointer;
   display: block;
   line-height: 0;
 }

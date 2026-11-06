@@ -32,6 +32,7 @@
         :queue="voiceQueue"
         @open-photo="openPhoto"
         @open-video="openVideo"
+        @open-sticker="openSticker"
         @delete="handleDelete"
       />
     </div>
@@ -40,9 +41,9 @@
 
     <PhotoViewer
       :open="viewerOpen"
-      :items="viewerItems"
+      :items="activeViewerItems"
       :start-index="viewerIndex"
-      @close="viewerOpen = false"
+      @close="closePhotoViewer"
     />
 
     <VideoViewer
@@ -70,8 +71,10 @@ import MessageInput from './MessageInput.vue'
 import MessageBubble from './MessageBubble.vue'
 import PhotoViewer from './PhotoViewer.vue'
 import VideoViewer from './VideoViewer.vue'
+import { usePlayerStore } from '../stores/player'
 
 const store = useChatStore()
+const player = usePlayerStore()
 const chat = computed(() => store.activeChat)
 
 
@@ -91,13 +94,14 @@ const messagesEl = ref(null)
 
 const viewerOpen = ref(false)
 const viewerIndex = ref(0)
+const viewerItemsOverride = ref(null)
 const videoViewerOpen = ref(false)
 const videoViewerIndex = ref(0)
 
 const viewerItems = computed(() => {
   const msgs = chat.value?.messages || []
   return msgs
-    .filter((m) => m.isImage && m.fileUuid)
+    .filter((m) => m.isImage && m.fileUuid && !/^sticker-/i.test(m.fileName || ''))
     .map((m) => ({
       src: getFileUrl(m.fileUuid),
       alt: m.fileName || 'image',
@@ -106,15 +110,65 @@ const viewerItems = computed(() => {
     }))
 })
 
+const activeViewerItems = computed(() => viewerItemsOverride.value || viewerItems.value)
+
 function fileUrl(uuid) {
   return getFileUrl(uuid)
 }
 
+function isStickerMsg(msg) {
+  if (!msg?.fileUuid) return false
+  if (msg.isSticker) return true
+  return /^sticker-/i.test(msg.fileName || '')
+}
+
+function openSticker(msg) {
+  if (!msg?.fileUuid) return
+  const hasAudio = !!msg.audioUuid
+  viewerItemsOverride.value = [{
+    src: getFileUrl(msg.fileUuid),
+    alt: msg.fileName || 'sticker',
+    caption: '',
+    fileName: msg.fileName || 'sticker.webp',
+    kind: 'sticker',
+    showEqualizer: hasAudio
+  }]
+  viewerIndex.value = 0
+  viewerOpen.value = true
+
+  // Через глобальный плеер — эквалайзер AvatarEqualizer читает bands/playing оттуда
+  if (hasAudio) {
+    player.play({
+      src: getFileUrl(msg.audioUuid),
+      title: 'Стикер',
+      kind: 'sticker',
+      queue: []
+    }).catch(() => {})
+  }
+}
+
 function openPhoto(msg) {
-  if (!msg?.fileUuid || !msg.isImage) return
+  if (!msg?.fileUuid) return
+  // Стикер мог прийти через open-photo (fallback) или как isImage
+  if (isStickerMsg(msg)) {
+    openSticker(msg)
+    return
+  }
+  if (!msg.isImage) return
+  // Не глушим чужую музыку профиля при обычных фото
+  viewerItemsOverride.value = null
   const idx = viewerItems.value.findIndex((it) => it.src === getFileUrl(msg.fileUuid))
   viewerIndex.value = idx >= 0 ? idx : 0
   viewerOpen.value = true
+}
+
+function closePhotoViewer() {
+  viewerOpen.value = false
+  viewerItemsOverride.value = null
+  // Останавливаем только звук стикера, не музыку профиля
+  if (player.kind === 'sticker') {
+    player.stop()
+  }
 }
 
 const videoViewerItems = computed(() => {
@@ -192,7 +246,13 @@ async function handleSend(payload) {
   // Стикер: файл уже в files-сервисе (image_uuid), upload не нужен
   if (sticker?.image_uuid) {
     const fileUuid = sticker.image_uuid
-    const plain = buildFileMessageText(fileUuid, stickerFileName(sticker), sticker.emoji || '')
+    const audioUuid = sticker.audio_uuid || sticker.audioUuid || ''
+    const plain = buildFileMessageText(
+      fileUuid,
+      stickerFileName(sticker),
+      sticker.emoji || '',
+      audioUuid
+    )
     const text = await maybeEncrypt(recipientId, plain)
     sendMessage({ recipientId, text })
     waitAndLinkFile(fileUuid)
@@ -429,16 +489,25 @@ watch(
 
 /* Стикеры — без ореола/пузыря */
 .bubble.sticker,
-.bubble.sticker.me {
+.bubble.sticker.me,
+.bubble.voice,
+.bubble.voice.me,
+.bubble.video-note,
+.bubble.video-note.me {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
   padding: 0 !important;
   border-radius: 0 !important;
+}
+
+.bubble.sticker {
   max-width: 180px;
 }
 
-.bubble.sticker .time {
+.bubble.sticker .time,
+.bubble.voice .time,
+.bubble.video-note .time {
   margin-top: 4px;
   padding-right: 2px;
 }

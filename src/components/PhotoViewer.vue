@@ -23,15 +23,42 @@
           ‹
         </button>
 
-        <div class="viewer-stage">
+        <div class="viewer-stage" :class="{ 'is-sticker': isStickerView }">
+          <!-- Стикер со звуком: квадратный эквалайзер по периметру картинки -->
+          <StickerEqualizer
+            v-if="isStickerView && current?.showEqualizer"
+            :max-size="eqSize"
+            :pad="26"
+            :bar-step="6"
+          >
+            <img
+              :src="current.src"
+              :alt="current.alt || ''"
+              class="viewer-sticker"
+              @click.stop
+            />
+          </StickerEqualizer>
+
+          <!-- Стикер без звука -->
           <img
-            v-if="current"
+            v-else-if="isStickerView"
             :src="current.src"
             :alt="current.alt || ''"
-            class="viewer-image"
+            class="viewer-sticker-plain"
             @click.stop
           />
-          <div v-if="current?.caption" class="viewer-caption">{{ current.caption }}</div>
+
+          <!-- Обычное фото -->
+          <template v-else>
+            <img
+              v-if="current"
+              :src="current.src"
+              :alt="current.alt || ''"
+              class="viewer-image"
+              @click.stop
+            />
+            <div v-if="current?.caption" class="viewer-caption">{{ current.caption }}</div>
+          </template>
         </div>
 
         <button
@@ -47,7 +74,7 @@
         <div class="viewer-footer">
           <span v-if="items.length > 1" class="counter">{{ index + 1 }} / {{ items.length }}</span>
           <a
-            v-if="current"
+            v-if="current && !isStickerView"
             class="btn-download"
             :href="current.src"
             :download="current.fileName || 'photo'"
@@ -64,10 +91,11 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import StickerEqualizer from './StickerEqualizer.vue'
 
 /**
- * items: Array<{ src: string, alt?: string, caption?: string, fileName?: string }>
+ * items: Array<{ src, alt?, caption?, fileName?, kind?, showEqualizer? }>
  */
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -79,19 +107,36 @@ const emit = defineEmits(['close'])
 
 const index = ref(0)
 const overlayEl = ref(null)
+const eqSize = ref(320)
 
 const current = computed(() => props.items[index.value] || null)
+const isStickerView = computed(() => current.value?.kind === 'sticker')
+
+function updateEqSize() {
+  // Квадрат под стикер: почти на весь экран, с запасом под полоски
+  const side = Math.min(window.innerWidth * 0.7, window.innerHeight * 0.58, 400)
+  eqSize.value = Math.max(200, Math.round(side))
+}
 
 watch(
   () => [props.open, props.startIndex, props.items.length],
   async ([isOpen, start]) => {
     if (isOpen) {
       index.value = Math.min(Math.max(0, Number(start) || 0), Math.max(0, props.items.length - 1))
+      updateEqSize()
       await nextTick()
       overlayEl.value?.focus()
     }
   }
 )
+
+onMounted(() => {
+  updateEqSize()
+  window.addEventListener('resize', updateEqSize)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateEqSize)
+})
 
 function close() {
   emit('close')
@@ -132,6 +177,10 @@ function next() {
   box-sizing: border-box;
 }
 
+.viewer-stage.is-sticker {
+  padding: 40px 24px;
+}
+
 .viewer-image {
   max-width: 100%;
   max-height: calc(90vh - 80px);
@@ -139,6 +188,23 @@ function next() {
   border-radius: 4px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
   background: #111;
+}
+
+.viewer-sticker {
+  max-width: min(72vw, 400px);
+  max-height: min(62vh, 400px);
+  object-fit: contain;
+  display: block;
+  background: transparent;
+}
+
+.viewer-sticker-plain {
+  max-width: min(72vw, 420px);
+  max-height: min(62vh, 420px);
+  object-fit: contain;
+  display: block;
+  background: transparent;
+  filter: drop-shadow(0 8px 28px rgba(42, 171, 238, 0.25));
 }
 
 .viewer-caption {
@@ -162,7 +228,6 @@ function next() {
   font-size: 28px;
   line-height: 1;
   cursor: pointer;
-  transition: background 0.15s ease;
   z-index: 2;
 }
 
@@ -178,29 +243,24 @@ function next() {
   height: 48px;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.1);
   color: #fff;
   font-size: 32px;
   line-height: 1;
   cursor: pointer;
-  transition: background 0.15s ease;
   z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 0 4px;
-}
-
-.btn-nav:hover {
-  background: rgba(255, 255, 255, 0.22);
 }
 
 .btn-prev {
-  left: 16px;
+  left: 12px;
 }
 
 .btn-next {
-  right: 16px;
+  right: 12px;
+}
+
+.btn-nav:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .viewer-footer {
@@ -209,31 +269,20 @@ function next() {
   left: 0;
   right: 0;
   display: flex;
-  align-items: center;
   justify-content: center;
-  gap: 20px;
+  align-items: center;
+  gap: 16px;
   color: #ccc;
-  font-size: 14px;
-}
-
-.counter {
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
+  font-size: 13px;
 }
 
 .btn-download {
-  color: #54a9eb;
+  color: #9be7ff;
   text-decoration: none;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  transition: background 0.15s ease;
 }
 
 .btn-download:hover {
-  background: rgba(255, 255, 255, 0.16);
-  color: #7ec0f5;
+  text-decoration: underline;
 }
 
 .viewer-fade-enter-active,
@@ -244,5 +293,14 @@ function next() {
 .viewer-fade-enter-from,
 .viewer-fade-leave-to {
   opacity: 0;
+}
+
+@media (max-width: 768px) {
+  .viewer-stage {
+    padding: 56px 12px 64px;
+  }
+  .btn-nav {
+    display: none;
+  }
 }
 </style>

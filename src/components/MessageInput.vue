@@ -19,7 +19,14 @@
           <path fill="currentColor" d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2Zm-3.2 8.2a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4Zm6.4 0a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4ZM12 18c-2.4 0-4.4-1.4-5.2-3.4h10.4C16.4 16.6 14.4 18 12 18Z"/>
         </svg>
       </button>
-      <button type="button" class="btn-attach" title="Прикрепить файл" @click="fileInput?.click()">📎</button>
+      <button type="button" class="btn-attach" title="Прикрепить файл" @click="fileInput?.click()">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M16.5 6.75v7.88a4.38 4.38 0 0 1-8.75 0V6.1a2.88 2.88 0 0 1 5.75 0v7.78a1.38 1.38 0 0 1-2.75 0V7.25h1.5v6.63a.88.88 0 0 0 1.75 0V6.1a4.38 4.38 0 1 0-8.75 0v8.53a5.88 5.88 0 0 0 11.75 0V6.75h-1.5Z"
+          />
+        </svg>
+      </button>
       <input v-model="text" @input="handleInput" @blur="stopTyping" @keyup.enter="send" placeholder="Сообщение" />
       <button
         v-if="!text.trim() && !pendingFile"
@@ -174,13 +181,6 @@ async function send() {
   /* for absolute sticker picker */
 }
 
-.btn-sticker {
-  color: #2aabee;
-  margin-right: 2px;
-  display: grid;
-  place-items: center;
-}
-
 .pending {
   display: flex;
   align-items: center;
@@ -222,19 +222,28 @@ async function send() {
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 18px;
-  padding: 4px 8px;
-}
-
-.btn-video-note {
   color: #2aabee;
-  margin-right: 4px;
-}
-
-.btn-sticker {
-  color: #2aabee;
-  display: grid;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  margin: 0;
+  display: inline-grid;
   place-items: center;
+  flex-shrink: 0;
+  line-height: 0;
+  border-radius: 50%;
+}
+
+.btn-video-note:hover,
+.btn-sticker:hover,
+.btn-attach:hover {
+  background: rgba(42, 171, 238, 0.1);
+}
+
+.btn-video-note svg,
+.btn-sticker svg,
+.btn-attach svg {
+  display: block;
 }
 
 .input > input[type='text'],
@@ -289,17 +298,13 @@ async function send() {
   .input > button:last-child,
   .input > .btn-voice,
   .btn-attach,
+  .btn-sticker,
   .btn-video-note {
     width: 40px;
     height: 40px;
     min-width: 40px;
     min-height: 40px;
-  }
-
-  .btn-video-note,
-  .btn-attach {
-    font-size: 20px;
-    padding: 6px;
+    padding: 0;
   }
 }
 </style>

@@ -93,8 +93,10 @@
           <div v-for="s in packStickers" :key="s.id" class="sm-cell has-actions">
             <img :src="fileUrl(s.image_uuid)" :alt="s.title || s.slug" />
             <span v-if="s.emoji" class="sm-emoji-badge">{{ s.emoji }}</span>
+            <span v-if="s.audio_uuid" class="sm-audio-badge" title="Есть музыка">♪</span>
             <div class="sm-cell-actions">
               <button type="button" class="sm-mini" title="Эмодзи" @click="startEditEmoji(s)">☺</button>
+              <button type="button" class="sm-mini" title="Музыка" @click="startEditAudio(s)">♪</button>
               <button type="button" class="sm-mini danger" title="Удалить" @click="onDeleteSticker(s)">×</button>
             </div>
           </div>
@@ -136,6 +138,32 @@
             <button type="button" class="sm-submit ghost" @click="emojiEdit = null">Отмена</button>
             <button type="button" class="sm-submit" :disabled="emojiSaving" @click="saveEmoji">
               {{ emojiSaving ? '…' : 'Сохранить' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Audio editor -->
+        <div v-if="audioEdit" class="sm-emoji-sheet">
+          <div class="sm-emoji-sheet-title">Музыка для стикера</div>
+          <p class="sm-hint" style="padding: 0 0 8px">
+            {{ audioEdit.audio_uuid ? 'Сейчас звук привязан. Можно заменить или удалить.' : 'Прикрепите аудио — оно будет играть при нажатии на стикер в чате.' }}
+          </p>
+          <label class="sm-file-btn">
+            <input type="file" accept="audio/*,.mp3,.ogg,.wav,.m4a,.aac" hidden :disabled="audioSaving" @change="onPickAudio" />
+            <span class="sm-file-icon" aria-hidden="true">♪</span>
+            <span class="sm-file-label">{{ audioFileName || (audioEdit.audio_uuid ? 'Заменить файл' : 'Выбрать аудио') }}</span>
+          </label>
+          <div class="sm-emoji-actions">
+            <button type="button" class="sm-submit ghost" @click="closeAudioEdit">Отмена</button>
+            <button
+              v-if="audioEdit.audio_uuid"
+              type="button"
+              class="sm-submit ghost"
+              :disabled="audioSaving"
+              @click="clearAudio"
+            >Убрать звук</button>
+            <button type="button" class="sm-submit" :disabled="audioSaving || !audioFile" @click="saveAudio">
+              {{ audioSaving ? '…' : 'Сохранить' }}
             </button>
           </div>
         </div>
@@ -214,6 +242,10 @@ const coverUpdating = ref(false)
 const emojiEdit = ref(null)
 const emojiDraft = ref('')
 const emojiSaving = ref(false)
+const audioEdit = ref(null)
+const audioFile = ref(null)
+const audioFileName = ref('')
+const audioSaving = ref(false)
 
 const allEmojis = ref([])
 
@@ -436,6 +468,65 @@ async function saveEmoji() {
     status.value = e.message || 'Не удалось сохранить эмодзи'
   } finally {
     emojiSaving.value = false
+  }
+}
+
+function startEditAudio(sticker) {
+  audioEdit.value = sticker
+  audioFile.value = null
+  audioFileName.value = ''
+  emojiEdit.value = null
+}
+
+function closeAudioEdit() {
+  audioEdit.value = null
+  audioFile.value = null
+  audioFileName.value = ''
+}
+
+function onPickAudio(e) {
+  const f = e.target.files?.[0]
+  e.target.value = ''
+  if (!f) return
+  audioFile.value = f
+  audioFileName.value = f.name
+}
+
+async function saveAudio() {
+  if (!audioEdit.value || !audioFile.value) return
+  audioSaving.value = true
+  status.value = ''
+  try {
+    const audioUuid = crypto.randomUUID()
+    await uploadFile(audioUuid, audioFile.value)
+    await updateSticker(audioEdit.value.id, { audio_uuid: audioUuid })
+    packStickers.value = packStickers.value.map((s) =>
+      s.id === audioEdit.value.id ? { ...s, audio_uuid: audioUuid } : s
+    )
+    closeAudioEdit()
+    status.value = 'Музыка сохранена'
+  } catch (e) {
+    status.value = e.message || 'Не удалось сохранить музыку'
+  } finally {
+    audioSaving.value = false
+  }
+}
+
+async function clearAudio() {
+  if (!audioEdit.value) return
+  audioSaving.value = true
+  status.value = ''
+  try {
+    await updateSticker(audioEdit.value.id, { audio_uuid: '' })
+    packStickers.value = packStickers.value.map((s) =>
+      s.id === audioEdit.value.id ? { ...s, audio_uuid: '' } : s
+    )
+    closeAudioEdit()
+    status.value = 'Звук убран'
+  } catch (e) {
+    status.value = e.message || 'Не удалось убрать звук'
+  } finally {
+    audioSaving.value = false
   }
 }
 
@@ -737,29 +828,35 @@ onMounted(() => {
 
 .sm-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  padding: 8px 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 10px 12px 16px;
 }
 
 .sm-cell {
   aspect-ratio: 1;
-  border-radius: 12px;
+  border-radius: 14px;
   background: #f0f7fc;
   overflow: hidden;
   display: grid;
   place-items: center;
   position: relative;
+  min-width: 0;
+  min-height: 96px;
 }
 
 .sm-cell img {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  padding: 6px;
+  box-sizing: border-box;
 }
 
-.sm-cell.has-actions:hover .sm-cell-actions {
+.sm-cell.has-actions:hover .sm-cell-actions,
+.sm-cell.has-actions:focus-within .sm-cell-actions {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .sm-emoji-badge {
@@ -771,32 +868,57 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.9);
   border-radius: 8px;
   padding: 2px 4px;
+  z-index: 1;
+}
+
+.sm-audio-badge {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.6);
+  color: #fff;
+  font-size: 11px;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  z-index: 1;
 }
 
 .sm-cell-actions {
   position: absolute;
   inset: 0;
-  background: rgba(15, 23, 42, 0.35);
+  background: rgba(15, 23, 42, 0.4);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
+  align-content: center;
   gap: 6px;
+  padding: 6px;
+  box-sizing: border-box;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.15s ease;
+  z-index: 2;
 }
 
 .sm-mini {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border: none;
   border-radius: 50%;
   background: #fff;
   color: #0f172a;
-  font-size: 16px;
+  font-size: 15px;
   cursor: pointer;
   display: grid;
   place-items: center;
   line-height: 1;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
 }
 
 .sm-mini.danger {

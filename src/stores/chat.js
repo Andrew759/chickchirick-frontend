@@ -161,6 +161,7 @@ function normalizeMessageFields(msg) {
   const parsed = parseFileMessageText(rawText)
   const fileUuid = explicitUuid || parsed.fileUuid
   const fileName = explicitName || parsed.fileName
+  const audioUuid = msg.audioUuid || msg.audio_uuid || parsed.audioUuid || null
   const text = fileUuid ? parsed.caption : rawText
 
   const isVoiceMessage = fileUuid ? isVoiceFilename(fileName) : false
@@ -168,6 +169,8 @@ function normalizeMessageFields(msg) {
   return {
     fileUuid: fileUuid || null,
     fileName: fileName || null,
+    audioUuid: audioUuid || null,
+    isSticker: fileUuid ? /^sticker-/i.test(fileName || '') : false,
     isImage: fileUuid ? isImageFilename(fileName) : false,
     isAudio: fileUuid ? isAudioFilename(fileName) : false,
     isVideo: fileUuid ? (isVideoFilename(fileName) && !isVoiceMessage) : false,
@@ -308,6 +311,8 @@ export const useChatStore = defineStore('chat', {
           text: extra.text,
           fileUuid: extra.fileUuid,
           fileName: extra.fileName,
+          audioUuid: extra.audioUuid || null,
+          isSticker: !!extra.isSticker,
           isImage: extra.isImage,
           isAudio: extra.isAudio,
           isVideo: extra.isVideo,
@@ -400,6 +405,8 @@ export const useChatStore = defineStore('chat', {
         text: extra.text,
         fileUuid: extra.fileUuid,
         fileName: extra.fileName,
+        audioUuid: extra.audioUuid || null,
+        isSticker: !!extra.isSticker,
         isImage: extra.isImage,
         isAudio: extra.isAudio,
         isVideo: extra.isVideo,
