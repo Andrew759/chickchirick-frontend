@@ -33,17 +33,35 @@
 
 
     <!-- Поиск всегда сверху -->
-    <div class="search-bar" @click="showSearch = true">
+    <div class="search-bar" :class="{ focused: searchFocused || searchQuery }">
       <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
         <path
           fill="currentColor"
           d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
         />
       </svg>
-      <span class="search-placeholder">Поиск</span>
+      <input
+        ref="searchInputEl"
+        v-model="searchQuery"
+        type="text"
+        class="search-input"
+        placeholder="Поиск"
+        autocomplete="off"
+        @focus="searchFocused = true"
+        @blur="onSearchBlur"
+        @input="onSearchInput"
+        @keydown.esc="clearSearch"
+      />
+      <button
+        v-if="searchQuery"
+        type="button"
+        class="search-clear"
+        title="Очистить"
+        @mousedown.prevent
+        @click="clearSearch"
+      >×</button>
     </div>
 
-    <UserSearch v-if="showSearch" @close="showSearch = false" />
     <StickersManager v-if="showStickers" @close="showStickers = false" />
 
     <PhotoViewer
@@ -55,46 +73,77 @@
     />
 
     <div class="chat-list">
-      <div v-if="chats.length === 0" class="no-chats">Нет активных чатов</div>
-
-      <div
-        v-for="chat in chats"
-        :key="'chat-' + chat.id"
-        class="chat"
-        :class="{ active: chat.id === store.activeChatId }"
-        @click="store.setActiveChat(chat.id)"
-      >
+      <!-- Результаты поиска пользователей -->
+      <template v-if="searchActive">
+        <div v-if="searchLoading" class="search-hint">Поиск…</div>
+        <div v-else-if="searchError" class="search-hint error">{{ searchError }}</div>
+        <div v-else-if="searchQuery.trim().length < 2" class="search-hint">
+          Введите минимум 2 символа
+        </div>
+        <div v-else-if="searchSearched && searchResults.length === 0" class="search-hint">
+          Никого не найдено
+        </div>
         <div
-          class="avatar"
-          :class="{ 'has-photo': !!chatAvatarUrl(chat) }"
-          @click.stop="openChatAvatar(chat)"
+          v-for="user in searchResults"
+          :key="'user-' + user.id"
+          class="chat search-result"
+          @click="selectSearchUser(user)"
         >
-          <img
-            v-if="chatAvatarUrl(chat)"
-            :src="chatAvatarUrl(chat)"
-            alt=""
-            class="avatar-img"
-          />
-          <template v-else>{{ avatarLetter(chat) }}</template>
+          <div class="avatar">{{ searchLetter(user) }}</div>
+          <div class="info">
+            <div class="row">
+              <div class="name-wrap">
+                <div class="name">{{ searchFullName(user) }}</div>
+              </div>
+            </div>
+            <div class="last">@{{ user.login }}</div>
+          </div>
         </div>
+      </template>
 
-        <div class="info">
-          <div class="row">
-            <div class="name-wrap">
-              <div class="name">{{ chat.name }}</div>
-              <span v-if="store.typingByChatId[chat.id]" class="typing-dots" aria-label="печатает">
-                <span></span><span></span><span></span>
-              </span>
-            </div>
-            <div class="time" v-if="formatMessageTime(lastMessage(chat)?.createdAt)">
-              {{ formatMessageTime(lastMessage(chat)?.createdAt) }}
-            </div>
+      <!-- Обычный список чатов -->
+      <template v-else>
+        <div v-if="chats.length === 0" class="no-chats">Нет активных чатов</div>
+
+        <div
+          v-for="chat in chats"
+          :key="'chat-' + chat.id"
+          class="chat"
+          :class="{ active: chat.id === store.activeChatId }"
+          @click="store.setActiveChat(chat.id)"
+        >
+          <div
+            class="avatar"
+            :class="{ 'has-photo': !!chatAvatarUrl(chat) }"
+            @click.stop="openChatAvatar(chat)"
+          >
+            <img
+              v-if="chatAvatarUrl(chat)"
+              :src="chatAvatarUrl(chat)"
+              alt=""
+              class="avatar-img"
+            />
+            <template v-else>{{ avatarLetter(chat) }}</template>
           </div>
-          <div class="last">
-            {{ lastMessagePreview(chat) }}
+
+          <div class="info">
+            <div class="row">
+              <div class="name-wrap">
+                <div class="name">{{ chat.name }}</div>
+                <span v-if="store.typingByChatId[chat.id]" class="typing-dots" aria-label="печатает">
+                  <span></span><span></span><span></span>
+                </span>
+              </div>
+              <div class="time" v-if="formatMessageTime(lastMessage(chat)?.createdAt)">
+                {{ formatMessageTime(lastMessage(chat)?.createdAt) }}
+              </div>
+            </div>
+            <div class="last">
+              {{ lastMessagePreview(chat) }}
+            </div>
           </div>
         </div>
-      </div>
+      </template>
     </div>
   </div>
 </template>
@@ -104,7 +153,7 @@ import { computed, ref } from 'vue'
 import { useChatStore, formatMessageTime } from '../stores/chat'
 import { getFileUrl } from '../services/files'
 import { parseFileMessageText } from '../services/fileMarker'
-import UserSearch from './UserSearch.vue'
+import { searchUsers, resolveMessagesIdByUuid } from '../services/users'
 import PhotoViewer from './PhotoViewer.vue'
 import AvatarEqualizer from './AvatarEqualizer.vue'
 import StickersManager from './StickersManager.vue'
@@ -112,10 +161,100 @@ import StickersManager from './StickersManager.vue'
 const store = useChatStore()
 
 const chats = computed(() => store.chats)
-const showSearch = ref(false)
 const showStickers = ref(false)
 const viewerOpen = ref(false)
 const viewerItems = ref([])
+
+// —— Inline search ——
+const searchQuery = ref('')
+const searchFocused = ref(false)
+const searchResults = ref([])
+const searchLoading = ref(false)
+const searchError = ref('')
+const searchSearched = ref(false)
+const searchInputEl = ref(null)
+let searchDebounce = null
+
+const searchActive = computed(() => searchQuery.value.trim().length > 0)
+
+function onSearchInput() {
+  clearTimeout(searchDebounce)
+  searchError.value = ''
+  const q = searchQuery.value.trim()
+  if (q.length < 2) {
+    searchResults.value = []
+    searchSearched.value = false
+    searchLoading.value = false
+    return
+  }
+  searchLoading.value = true
+  searchDebounce = setTimeout(() => doSearch(q), 300)
+}
+
+async function doSearch(q) {
+  searchLoading.value = true
+  searchError.value = ''
+  try {
+    searchResults.value = await searchUsers(q)
+    searchSearched.value = true
+  } catch (e) {
+    searchError.value = e.message || 'Ошибка поиска'
+    searchResults.value = []
+    searchSearched.value = true
+  } finally {
+    searchLoading.value = false
+  }
+}
+
+function clearSearch() {
+  clearTimeout(searchDebounce)
+  searchQuery.value = ''
+  searchResults.value = []
+  searchError.value = ''
+  searchSearched.value = false
+  searchLoading.value = false
+  searchFocused.value = false
+  searchInputEl.value?.blur()
+}
+
+function onSearchBlur() {
+  // Небольшая задержка, чтобы клик по результату успел сработать
+  setTimeout(() => {
+    searchFocused.value = false
+  }, 150)
+}
+
+function searchFullName(user) {
+  const n = `${user.name || ''} ${user.surname || ''}`.trim()
+  return n || user.login || `User ${user.id}`
+}
+
+function searchLetter(user) {
+  const n = (user.name || user.login || '?').trim()
+  return n[0]?.toUpperCase() || '?'
+}
+
+async function selectSearchUser(user) {
+  searchError.value = ''
+  if (!user?.userUuid) {
+    searchError.value = 'У пользователя нет UUID — чат недоступен'
+    return
+  }
+  searchLoading.value = true
+  try {
+    const messagesId = await resolveMessagesIdByUuid(user.userUuid)
+    if (!messagesId) {
+      searchError.value = 'Пользователь ещё не доступен в мессенджере'
+      return
+    }
+    store.openChatWithUser(user, messagesId)
+    clearSearch()
+  } catch (e) {
+    searchError.value = e.message || 'Не удалось открыть чат'
+  } finally {
+    searchLoading.value = false
+  }
+}
 
 const myAvatarUrl = computed(() => {
   const uuid = store.myProfile?.avatarFileUuid
@@ -329,16 +468,20 @@ function openChatAvatar(chat) {
   align-items: center;
   gap: 8px;
   margin: 8px 12px 10px;
-  padding: 9px 14px;
+  padding: 7px 12px;
   background: #f2f9fd;
   border-radius: 22px;
-  cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.search-bar:hover {
+.search-bar:hover,
+.search-bar.focused {
   background: #e9f7ff;
+}
+
+.search-bar.focused {
+  box-shadow: inset 0 0 0 1.5px rgba(42, 171, 238, 0.35);
 }
 
 .search-icon {
@@ -346,10 +489,55 @@ function openChatAvatar(chat) {
   flex-shrink: 0;
 }
 
-.search-placeholder {
-  color: #8e8e93;
+.search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
   font-size: 15px;
-  user-select: none;
+  color: #0f172a;
+  padding: 2px 0;
+  outline: none;
+}
+
+.search-input::placeholder {
+  color: #8e8e93;
+}
+
+.search-clear {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: #c5d0da;
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  margin: 0;
+}
+
+.search-clear:hover {
+  background: #94a3b8;
+}
+
+.search-hint {
+  padding: 24px 16px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.search-hint.error {
+  color: #ea0038;
+}
+
+.search-result .last {
+  color: #64748b;
 }
 
 /* —— Список чатов —— */

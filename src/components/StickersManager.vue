@@ -158,12 +158,13 @@
           </label>
         </div>
         <label class="sm-checkrow">
-          <input v-model="form.published" type="checkbox" />
-          Опубликовать в каталоге
+          <input v-model="form.published" type="checkbox" class="sm-checkbox" />
+          <span class="sm-check-ui" aria-hidden="true"></span>
+          <span>Опубликовать в каталоге</span>
         </label>
         <button
             type="button"
-            class="sm-submit"
+            class="sm-submit sm-submit-compact"
             :disabled="saving || !form.title.trim()"
             @click="submitPack"
         >
@@ -968,20 +969,76 @@ onMounted(() => {
 .sm-checkrow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-size: 14px;
   color: #334155;
+  cursor: pointer;
+  user-select: none;
+  width: fit-content;
+}
+
+.sm-checkbox {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.sm-check-ui {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 2px solid #94a3b8;
+  background: #fff;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.sm-check-ui::after {
+  content: '';
+  width: 10px;
+  height: 6px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) translate(1px, -1px) scale(0);
+  transition: transform 0.12s ease;
+}
+
+.sm-checkbox:checked + .sm-check-ui {
+  border-color: #2aabee;
+  background: linear-gradient(135deg, #38bdf8, #2aabee);
+}
+
+.sm-checkbox:checked + .sm-check-ui::after {
+  transform: rotate(-45deg) translate(1px, -1px) scale(1);
+}
+
+.sm-checkbox:focus-visible + .sm-check-ui {
+  box-shadow: 0 0 0 3px rgba(42, 171, 238, 0.25);
 }
 
 .sm-submit {
   border: none;
   background: linear-gradient(135deg, #38bdf8, #2aabee);
   color: #fff;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  padding: 12px;
-  border-radius: 12px;
+  padding: 8px 16px;
+  border-radius: 10px;
   cursor: pointer;
+  line-height: 1.2;
+}
+
+.sm-submit-compact {
+  align-self: flex-start;
+  width: auto;
+  min-width: 96px;
+}
+
+.sm-emoji-actions .sm-submit {
   flex: 1;
 }
 
