@@ -19,18 +19,50 @@
         </AvatarEqualizer>
       </button>
       <span class="header-title">Чаты</span>
-      <button
-        type="button"
-        class="btn-stickers"
-        title="Стикеры"
-        @click="showStickers = true"
-      >
-        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-          <path fill="currentColor" d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2Zm-3.2 8.2a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4Zm6.4 0a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4ZM12 18c-2.4 0-4.4-1.4-5.2-3.4h10.4C16.4 16.6 14.4 18 12 18Z"/>
-        </svg>
-      </button>
     </div>
 
+    <!-- Переключение типов чатов и быстрые действия -->
+    <nav class="chat-toolbar" aria-label="Разделы чатов">
+      <button
+        type="button"
+        class="toolbar-tab"
+        :class="{ active: chatFilter === 'direct' }"
+        :aria-pressed="chatFilter === 'direct'"
+        @click="chatFilter = 'direct'"
+      >
+        <ChatTypeIcon type="direct" :variant="1" :size="18" label="Личные сообщения" />
+        <span>Личные</span>
+      </button>
+      <button
+        type="button"
+        class="toolbar-tab"
+        :class="{ active: chatFilter === 'group' }"
+        :aria-pressed="chatFilter === 'group'"
+        @click="chatFilter = 'group'"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 19v-1.5A4.5 4.5 0 0 1 8 13h2a4.5 4.5 0 0 1 4.5 4.5V19Z"/><path d="M16 5.5a3 3 0 0 1 0 5.8M17 13h.5a3.5 3.5 0 0 1 3.5 3.5V19h-4"/></svg>
+        <span>Группы</span>
+      </button>
+      <button
+        type="button"
+        class="toolbar-tab"
+        :class="{ active: chatFilter === 'channel' }"
+        :aria-pressed="chatFilter === 'channel'"
+        @click="chatFilter = 'channel'"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.3 4.3a10.9 10.9 0 0 0 0 15.4M19.7 4.3a10.9 10.9 0 0 1 0 15.4"/></svg>
+        <span>Каналы</span>
+      </button>
+      <button
+        type="button"
+        class="toolbar-action"
+        title="Загрузить стикеры"
+        aria-label="Загрузить стикеры"
+        @click="showStickers = true"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8a9.2 9.2 0 1 0 9.2 9.2V9.5A6.7 6.7 0 0 0 14.5 2.8Z"/><path d="M14.5 2.8v6.7h6.7M8.5 10h.01M15.5 10h.01M8.5 15c1.8 2 5.2 2 7 0"/></svg>
+      </button>
+    </nav>
 
     <!-- Поиск всегда сверху -->
     <div class="search-bar" :class="{ focused: searchFocused || searchQuery }">
@@ -103,10 +135,12 @@
 
       <!-- Обычный список чатов -->
       <template v-else>
-        <div v-if="chats.length === 0" class="no-chats">Нет активных чатов</div>
+        <div v-if="visibleChats.length === 0" class="no-chats">
+          {{ chatFilter === 'group' ? 'Групповых чатов пока нет' : chatFilter === 'channel' ? 'Каналов пока нет' : 'Нет активных личных чатов' }}
+        </div>
 
         <div
-          v-for="chat in chats"
+          v-for="chat in visibleChats"
           :key="'chat-' + chat.id"
           class="chat"
           :class="{ active: chat.id === store.activeChatId }"
@@ -157,10 +191,28 @@ import { searchUsers, resolveMessagesIdByUuid } from '../services/users'
 import PhotoViewer from './PhotoViewer.vue'
 import AvatarEqualizer from './AvatarEqualizer.vue'
 import StickersManager from './StickersManager.vue'
+import ChatTypeIcon from './ChatTypeIcon.vue'
 
 const store = useChatStore()
 
 const chats = computed(() => store.chats)
+const chatFilter = ref('direct')
+
+function chatKind(chat) {
+  const type = String(chat?.type || chat?.chatType || chat?.chat_type || '').toLowerCase()
+  if (chat?.isChannel === true || chat?.is_channel === true ||
+      chat?.channelId != null || chat?.channel_id != null ||
+      ['channel', 'broadcast', 'broadcast_channel'].includes(type)) return 'channel'
+  if (chat?.isGroup === true || chat?.is_group === true ||
+      chat?.groupId != null || chat?.group_id != null ||
+      ['group', 'group_chat', 'supergroup'].includes(type)) return 'group'
+  return 'direct'
+}
+
+const visibleChats = computed(() => chats.value.filter((chat) =>
+  chatKind(chat) === chatFilter.value
+))
+
 const showStickers = ref(false)
 const viewerOpen = ref(false)
 const viewerItems = ref([])
@@ -437,22 +489,66 @@ function openChatAvatar(chat) {
   margin: -2px;
 }
 
-.btn-stickers {
-  border: none;
-  background: transparent;
-  color: #2aabee;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
+.chat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #f0f0f0;
   flex-shrink: 0;
-  margin-left: auto;
 }
 
-.btn-stickers:hover {
-  background: rgba(42, 171, 238, 0.1);
+.toolbar-tab,
+.toolbar-action {
+  height: 36px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+
+.toolbar-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 7px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.toolbar-tab svg,
+.toolbar-action svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+.toolbar-action {
+  flex: 0 0 34px;
+  width: 34px;
+  padding: 0;
+}
+
+.toolbar-tab:hover,
+.toolbar-action:hover {
+  background: #f0f8fd;
+  color: #168dcc;
+}
+
+.toolbar-tab.active {
+  color: #168dcc;
+  background: #e8f6fe;
 }
 
 .header-title {
