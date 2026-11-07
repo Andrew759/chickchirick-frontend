@@ -56,13 +56,13 @@ defineEmits(['close', 'change-theme'])
 .appearance-help{font-size:12px;line-height:1.5;color:#8293a3;margin:12px 0 0}
 .settings-row{display:flex;align-items:center;gap:13px;padding:15px 10px;border-top:1px solid #e6edf3;font-size:14px}
 .settings-row>span{font-size:21px;color:#8293a3}.settings-row div{display:flex;flex-direction:column;gap:4px;flex:1}.settings-row small{color:#8293a3}.settings-row b{font-size:20px;color:#8293a3}
-:global(html[data-theme="dark"]) .settings-drawer{background:#17232f;color:#e6edf3}
-:global(html[data-theme="dark"]) .settings-head{background:#14202b;border-color:#2b3d4c}
+:global(html[data-theme="dark"]) .settings-drawer{background:#1a222c;color:#e6edf3}
+:global(html[data-theme="dark"]) .settings-head{background:#14202b;border-color:#2a333e}
 :global(html[data-theme="dark"]) .settings-head h2,:global(html[data-theme="dark"]) .settings-profile strong,:global(html[data-theme="dark"]) .appearance-label,:global(html[data-theme="dark"]) .settings-row strong{color:#e6edf3}
-:global(html[data-theme="dark"]) .settings-profile{border-color:#2b3d4c}
+:global(html[data-theme="dark"]) .settings-profile{border-color:#2a333e}
 :global(html[data-theme="dark"]) .settings-profile p,:global(html[data-theme="dark"]) .appearance-help,:global(html[data-theme="dark"]) .settings-row small{color:#b4c2ce}
 :global(html[data-theme="dark"]) .settings-section{background:#203747;color:#75ccf8}
 :global(html[data-theme="dark"]) .theme-card{background:#1c2c39;color:#c5d1dc;border-color:#3a4d5c}
 :global(html[data-theme="dark"]) .theme-card.selected{background:#173b50;color:#75ccf8;border-color:#2aabee}
-:global(html[data-theme="dark"]) .settings-row{border-color:#2b3d4c}
+:global(html[data-theme="dark"]) .settings-row{border-color:#2a333e}
 </style>

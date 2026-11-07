@@ -824,11 +824,20 @@ function openChatAvatar(chat) {
 </style>
 
 <style>
-:global(html[data-theme="dark"]) .sidebar { background:#111b25; border-color:#263746; }
-:global(html[data-theme="dark"]) .sidebar .header { background:#17232f; border-color:#263746; }
+:global(html[data-theme="dark"]) .sidebar { background:#161c24; border-color:#252d38; }
+:global(html[data-theme="dark"]) .sidebar .header {
+  background:#1a222c;
+  border-color:#252d38;
+  border-bottom: 1px solid #252d38;
+  box-shadow: none;
+}
 :global(html[data-theme="dark"]) .sidebar .header-title,
 :global(html[data-theme="dark"]) .sidebar .name { color:#e6edf3; }
-:global(html[data-theme="dark"]) .sidebar .chat-toolbar { border-color:#263746; }
+:global(html[data-theme="dark"]) .sidebar .chat-toolbar {
+  border-color:#252d38;
+  border-bottom: 1px solid #252d38;
+  box-shadow: none;
+}
 :global(html[data-theme="dark"]) .sidebar .toolbar-tab,
 :global(html[data-theme="dark"]) .sidebar .toolbar-action { color:#9aafbf; }
 :global(html[data-theme="dark"]) .sidebar .toolbar-tab.active { color:#65c5f5; background:#17364a; }
@@ -841,7 +850,7 @@ function openChatAvatar(chat) {
 :global(html[data-theme="dark"]) .sidebar .search-input::placeholder { color:#8195a5; }
 :global(html[data-theme="dark"]) .sidebar .chat { color:#dce6ee; border-color:#263746; }
 :global(html[data-theme="dark"]) .sidebar .chat:hover { background:#1b2b38; }
-:global(html[data-theme="dark"]) .sidebar .chat.active { background:#18384b; }
+:global(html[data-theme="dark"]) .sidebar .chat.active { background:#1a2e3d; }
 :global(html[data-theme="dark"]) .sidebar .last,
 :global(html[data-theme="dark"]) .sidebar .time,
 :global(html[data-theme="dark"]) .sidebar .no-chats,

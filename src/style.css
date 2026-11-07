@@ -55,11 +55,12 @@ body {
 /* Messenger dark theme: shared surfaces and controls */
 html[data-theme="dark"] {
   color-scheme: dark;
-  --dm-bg: #0e1720;
-  --dm-panel: #17232f;
-  --dm-panel-raised: #1d2c39;
-  --dm-panel-soft: #223442;
-  --dm-border: #2b3d4c;
+  /* Нейтральный тёмный — меньше синего оттенка, меньше «ореола» по краям */
+  --dm-bg: #12181f;
+  --dm-panel: #1a222c;
+  --dm-panel-raised: #222b36;
+  --dm-panel-soft: #2a3440;
+  --dm-border: #2a333e;
   --dm-text: #e6edf3;
   --dm-muted: #91a4b4;
   --dm-accent: #55b8e8;
@@ -141,17 +142,17 @@ html[data-theme="dark"] .layout,
 html[data-theme="dark"] .main-column,
 html[data-theme="dark"] .panel-chat,
 html[data-theme="dark"] .panel-list {
-  background: #0e1720 !important;
+  background: #12181f !important;
   color: #e6edf3 !important;
 }
 html[data-theme="dark"] .chat-window {
-  background: #0e1720 !important;
+  background: #12181f !important;
   color: #e6edf3 !important;
 }
 html[data-theme="dark"] .chat-window > .header {
   background: rgba(23, 35, 47, .96) !important;
   color: #e6edf3 !important;
-  border-color: #2b3d4c !important;
+  border-color: #2a333e !important;
   box-shadow: none !important;
 }
 html[data-theme="dark"] .chat-window .chat-name,
@@ -161,12 +162,12 @@ html[data-theme="dark"] .chat-window .text {
   color: #e6edf3 !important;
 }
 html[data-theme="dark"] .chat-window .messages {
-  background-color: #0e1720 !important;
+  background-color: #12181f !important;
   background-image: none !important;
 }
 html[data-theme="dark"] .chat-window .bubble:not(.me) {
   background: #1d2c39 !important;
-  border-color: #2b3d4c !important;
+  border-color: #2a333e !important;
   color: #e6edf3 !important;
 }
 html[data-theme="dark"] .chat-window .bubble.me {
@@ -193,8 +194,8 @@ html[data-theme="dark"] .chat-window .bubble .content,
 html[data-theme="dark"] .chat-window .bubble .text { color: inherit !important; }
 html[data-theme="dark"] .chat-window .time { color: #91a4b4 !important; }
 html[data-theme="dark"] .input-wrap {
-  background: #17232f !important;
-  border-color: #2b3d4c !important;
+  background: #1a222c !important;
+  border-color: #2a333e !important;
 }
 html[data-theme="dark"] .input-wrap .input > input,
 html[data-theme="dark"] .input-wrap input,
@@ -206,14 +207,14 @@ html[data-theme="dark"] .input-wrap textarea {
 html[data-theme="dark"] .input-wrap input::placeholder,
 html[data-theme="dark"] .input-wrap textarea::placeholder { color: #91a4b4 !important; }
 html[data-theme="dark"] .sidebar {
-  background: #111b25 !important;
-  border-color: #2b3d4c !important;
+  background: #161c24 !important;
+  border-color: #2a333e !important;
   color: #e6edf3 !important;
 }
-html[data-theme="dark"] .sidebar .header { background: #17232f !important; border-color: #2b3d4c !important; }
+html[data-theme="dark"] .sidebar .header { background: #1a222c !important; border-color: #2a333e !important; }
 html[data-theme="dark"] .sidebar .header-title,
 html[data-theme="dark"] .sidebar .name { color: #e6edf3 !important; }
-html[data-theme="dark"] .sidebar .chat-toolbar { border-color: #2b3d4c !important; }
+html[data-theme="dark"] .sidebar .chat-toolbar { border-color: #2a333e !important; }
 html[data-theme="dark"] .sidebar .toolbar-tab,
 html[data-theme="dark"] .sidebar .toolbar-action { color: #a9bdcc !important; }
 html[data-theme="dark"] .sidebar .toolbar-tab.active { color: #75ccf8 !important; background: #17364a !important; }
@@ -224,7 +225,7 @@ html[data-theme="dark"] .sidebar .search-input { color: #e6edf3 !important; }
 html[data-theme="dark"] .sidebar .search-input::placeholder { color: #91a4b4 !important; }
 html[data-theme="dark"] .sidebar .chat { color: #dce6ee !important; border-color: #263746 !important; }
 html[data-theme="dark"] .sidebar .chat:hover { background: #1b2b38 !important; }
-html[data-theme="dark"] .sidebar .chat.active { background: #18384b !important; }
+html[data-theme="dark"] .sidebar .chat.active { background: #1a2e3d !important; }
 html[data-theme="dark"] .sidebar .last,
 html[data-theme="dark"] .sidebar .time,
 html[data-theme="dark"] .sidebar .no-chats,
@@ -238,11 +239,11 @@ html[data-theme="dark"] .theme-option.active { background: #173b50 !important; c
 
 /* === Complete dark-theme contrast pass (all Vue feature panels) === */
 html[data-theme="dark"] {
-  --dm-bg: #0e1720;
-  --dm-panel: #17232f;
-  --dm-panel-raised: #1d2c39;
-  --dm-panel-soft: #223442;
-  --dm-border: #304454;
+  --dm-bg: #12181f;
+  --dm-panel: #1a222c;
+  --dm-panel-raised: #222b36;
+  --dm-panel-soft: #2a3440;
+  --dm-border: #2a333e;
   --dm-text: #f1f5f9;
   --dm-muted: #c0ccd6;
   --dm-accent: #55b8e8;
@@ -308,10 +309,15 @@ html[data-theme="dark"] .state.muted,
 html[data-theme="dark"] .sm-hint,
 html[data-theme="dark"] .sm-sub,
 html[data-theme="dark"] .hint,
-html[data-theme="dark"] .meta,
-html[data-theme="dark"] .info-group,
-html[data-theme="dark"] .info-group label {
+html[data-theme="dark"] .meta {
   color: var(--dm-muted) !important;
+}
+/* Подписи полей профиля — акцент, значения — яркий текст */
+html[data-theme="dark"] .info-group label {
+  color: #75ccf8 !important;
+}
+html[data-theme="dark"] .info-group p {
+  color: var(--dm-text) !important;
 }
 
 /* Profile and public profile panels: remove hard-coded white surfaces and dim grey text. */
@@ -486,41 +492,49 @@ html[data-theme="dark"] textarea:focus-visible {
   outline-color: #55b8e8 !important;
 }
 
-/* —— Убираем голубой ореол по бокам (слева/справа), заменяем на тёмный акцент —— */
+/* —— Убираем голубой ореол по бокам и под шапками —— */
 html[data-theme="dark"] .profile-overlay {
   box-shadow: -10px 0 28px rgba(0, 0, 0, 0.35) !important;
 }
 html[data-theme="dark"] .sidebar {
-  border-right-color: #243442 !important;
+  border-right-color: #252d38 !important;
   box-shadow: none !important;
 }
 html[data-theme="dark"] .panel-list {
-  border-right-color: #243442 !important;
+  border-right-color: #252d38 !important;
   box-shadow: none !important;
 }
 html[data-theme="dark"] .chat-window,
 html[data-theme="dark"] .chat-window .messages,
 html[data-theme="dark"] .main-column,
 html[data-theme="dark"] .panel-chat {
-  background-color: #0e1720 !important;
+  background-color: #12181f !important;
   background-image: none !important;
   box-shadow: none !important;
 }
-/* Голубые тени из ChatWindow.vue (header, bubbles) → нейтральные/тёмные в dark */
+
+/* Горизонтальный голубой ореол под шапками «Чаты» / чат / тулбар — убираем */
+html[data-theme="dark"] .sidebar .header,
+html[data-theme="dark"] .sidebar .chat-toolbar,
 html[data-theme="dark"] .chat-window > .header {
-  border-bottom-color: #2b3d4c !important;
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25) !important;
+  border-bottom: 1px solid #252d38 !important;
+  border-bottom-color: #252d38 !important;
+  box-shadow: none !important;
+  background-image: none !important;
 }
+
+/* Голубые тени пузырей → нейтральные тёмные */
 html[data-theme="dark"] .chat-window .bubble:not(.no-halo):not(.sticker):not(.voice):not(.video-note) {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22) !important;
-  border-color: #2b3d4c !important;
+  border-color: #2a333e !important;
 }
 html[data-theme="dark"] .chat-window .bubble.me:not(.no-halo):not(.sticker):not(.voice):not(.video-note) {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28) !important;
   border-color: #245c7c !important;
 }
-/* Индикатор активного чата слева — тёмный акцент вместо яркого голубого ореола */
+
+/* Индикатор активного чата слева — тёмный акцент */
 html[data-theme="dark"] .sidebar .chat.active {
   box-shadow: inset 3px 0 0 #3d8eb8 !important;
-  background: #18384b !important;
+  background: #1a2e3d !important;
 }

@@ -307,4 +307,11 @@ async function send() {
     padding: 0;
   }
 }
+
+/* Тёмная тема: убираем голубую линию сверху инпута */
+:global(html[data-theme="dark"]) .input-wrap {
+  border-top: 1px solid #252d38 !important;
+  box-shadow: none !important;
+  background: #1a222c !important;
+}
 </style>

@@ -995,19 +995,40 @@ onMounted(() => {
 }
 
 :global(html[data-theme="dark"]) .theme-card {
-  background: #1c2c39;
-  color: #c5d1dc;
-  border-color: #3a4d5c;
+  background: #222b36 !important;
+  color: #c5d1dc !important;
+  border-color: #2a333e !important;
 }
 
 :global(html[data-theme="dark"]) .theme-card.selected {
-  background: #173b50;
-  color: #75ccf8;
-  border-color: #2aabee;
+  background: #1a2e3d !important;
+  color: #75ccf8 !important;
+  border-color: #2aabee !important;
 }
 
 :global(html[data-theme="dark"]) .theme-help {
-  color: #b4c2ce;
+  color: #b4c2ce !important;
+}
+
+/* Кнопка «+ Добавить музыку» — не белая в dark */
+:global(html[data-theme="dark"]) .btn-add-music {
+  background: #222b36 !important;
+  border: 1px dashed #3d8eb8 !important;
+  color: #75ccf8 !important;
+}
+:global(html[data-theme="dark"]) .btn-add-music:hover:not(:disabled) {
+  background: #2a3440 !important;
+}
+
+/* Имя / логин / телефон — нормальный контраст */
+:global(html[data-theme="dark"]) .info-group {
+  border-bottom-color: #2a333e !important;
+}
+:global(html[data-theme="dark"]) .info-group label {
+  color: #75ccf8 !important;
+}
+:global(html[data-theme="dark"]) .info-group p {
+  color: #e6edf3 !important;
 }
 
 .btn-logout {

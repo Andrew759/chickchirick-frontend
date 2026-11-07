@@ -712,4 +712,37 @@ watch(
   }
 
 }
+
+/* Тёмная тема: убираем голубой ореол (radial, тени, border) — только dark */
+:global(html[data-theme="dark"]) .chat-window {
+  background: #12181f !important;
+  background-image: none !important;
+}
+:global(html[data-theme="dark"]) .chat-window > .header {
+  background: #1a222c !important;
+  border-bottom: 1px solid #252d38 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+:global(html[data-theme="dark"]) .chat-window .messages {
+  background: #12181f !important;
+  background-image: none !important;
+}
+:global(html[data-theme="dark"]) .chat-window .bubble:not(.no-halo):not(.sticker):not(.voice):not(.video-note) {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25) !important;
+  border-color: #2a333e !important;
+}
+:global(html[data-theme="dark"]) .chat-window .bubble.me:not(.no-halo):not(.sticker):not(.voice):not(.video-note) {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+  border-color: #245c7c !important;
+}
+:global(html[data-theme="dark"]) .chat-window .bubble.no-halo,
+:global(html[data-theme="dark"]) .chat-window .bubble.no-halo.me,
+:global(html[data-theme="dark"]) .chat-window .bubble.sticker,
+:global(html[data-theme="dark"]) .chat-window .bubble.voice,
+:global(html[data-theme="dark"]) .chat-window .bubble.video-note {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
 </style>
