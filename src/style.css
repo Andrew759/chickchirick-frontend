@@ -1,56 +1,67 @@
-@import url('https://googleapis.com');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  font-family: 'Inter', sans-serif;
-}
 
-body {
-  @apply bg-[#f0f2f5] m-0 overflow-hidden;
-}
-
-/* Красивый тонкий скроллбар */
-::-webkit-scrollbar {
-  width: 5px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 10px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-
-/* Убираем контур у инпутов */
-input:focus {
-  outline: none;
-}
-
-
-/* Mobile / touch baseline */
-html, body, #app {
+/* ===== Viewport edge reset: no borders/outlines on roots ===== */
+html {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-width: 0 !important;
+  border-style: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background-color: #f0f2f5;
+  width: 100%;
   height: 100%;
-  max-height: 100dvh;
+  overflow: hidden;
 }
-
+html[data-theme="dark"] {
+  background-color: #12181f !important;
+}
 body {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-width: 0 !important;
+  border-style: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  width: 100%;
+  min-height: 100%;
+  overflow: hidden;
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
+  background-color: #f0f2f5;
 }
-
-@media (max-width: 768px) {
-  body {
-    /* чуть мягче фон на маленьких экранах */
-    @apply bg-[#eef8ff];
-  }
+html[data-theme="dark"] body {
+  background-color: #12181f !important;
+  color: #e6edf3;
 }
-
+#app {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-width: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  width: 100%;
+  min-height: 100%;
+  background-color: #f0f2f5;
+}
+html[data-theme="dark"] #app {
+  background-color: #12181f !important;
+  color: #e6edf3;
+}
+html:focus, html:focus-visible,
+body:focus, body:focus-visible,
+#app:focus, #app:focus-visible {
+  outline: none !important;
+  border: 0 !important;
+}
 
 /* Messenger dark theme: shared surfaces and controls */
 html[data-theme="dark"] {
@@ -65,8 +76,14 @@ html[data-theme="dark"] {
   --dm-muted: #91a4b4;
   --dm-accent: #55b8e8;
 }
+html[data-theme="dark"],
 html[data-theme="dark"] body,
-html[data-theme="dark"] #app { background: var(--dm-bg) !important; color: var(--dm-text); }
+html[data-theme="dark"] #app {
+  background: var(--dm-bg) !important;
+  color: var(--dm-text);
+  border: none !important;
+  outline: none !important;
+}
 html[data-theme="dark"] .layout,
 html[data-theme="dark"] .panel-chat,
 html[data-theme="dark"] .main-column { background: var(--dm-bg) !important; color: var(--dm-text); }
@@ -134,7 +151,120 @@ html[data-theme="dark"] .sm-hint,
 html[data-theme="dark"] .sm-sub,
 html[data-theme="dark"] .track-meta { color: var(--dm-muted) !important; }
 html[data-theme="dark"] button { color-scheme: dark; }
-html[data-theme="dark"] .auth-wrapper { background: var(--dm-bg) !important; }
+html[data-theme="dark"] .auth-wrapper {
+  background: var(--dm-bg) !important;
+}
+
+/* ── Auth (login / register) dark theme ── */
+html[data-theme="dark"] .login-container,
+html[data-theme="dark"] .reg-container {
+  background: var(--dm-bg) !important;
+}
+html[data-theme="dark"] .login-form,
+html[data-theme="dark"] .reg-form {
+  background: var(--dm-panel) !important;
+  color: var(--dm-text) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4) !important;
+  border: 1px solid var(--dm-border) !important;
+}
+html[data-theme="dark"] .login-form h2,
+html[data-theme="dark"] .reg-form h2 {
+  color: var(--dm-text) !important;
+}
+html[data-theme="dark"] .login-form label,
+html[data-theme="dark"] .reg-form label {
+  color: var(--dm-muted) !important;
+}
+html[data-theme="dark"] .login-form input,
+html[data-theme="dark"] .reg-form input:not([type="checkbox"]) {
+  background: var(--dm-panel-raised) !important;
+  color: var(--dm-text) !important;
+  border: 1px solid var(--dm-border) !important;
+  border-radius: 10px !important;
+  padding: 12px 14px !important;
+  -webkit-text-fill-color: var(--dm-text) !important;
+  caret-color: var(--dm-text);
+}
+html[data-theme="dark"] .login-form input:-webkit-autofill,
+html[data-theme="dark"] .login-form input:-webkit-autofill:hover,
+html[data-theme="dark"] .login-form input:-webkit-autofill:focus,
+html[data-theme="dark"] .reg-form input:-webkit-autofill,
+html[data-theme="dark"] .reg-form input:-webkit-autofill:hover,
+html[data-theme="dark"] .reg-form input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #222b36 inset !important;
+  -webkit-text-fill-color: #e6edf3 !important;
+  caret-color: #e6edf3;
+  border: 1px solid var(--dm-border) !important;
+  transition: background-color 99999s ease-out, color 99999s ease-out;
+}
+html[data-theme="dark"] .login-form input::placeholder,
+html[data-theme="dark"] .reg-form input:not([type="checkbox"])::placeholder {
+  color: #8195a5 !important;
+  opacity: 1;
+  -webkit-text-fill-color: #8195a5 !important;
+}
+html[data-theme="dark"] .login-form input:focus,
+html[data-theme="dark"] .reg-form input:not([type="checkbox"]):focus {
+  border-color: var(--dm-accent) !important;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(85, 184, 232, 0.2) !important;
+}
+html[data-theme="dark"] .login-form .btn-submit,
+html[data-theme="dark"] .reg-form .btn-submit,
+html[data-theme="dark"] .reg-form .btn-next {
+  background: #0da3f1 !important;
+  color: #fff !important;
+  border-radius: 10px !important;
+  font-weight: 600;
+}
+html[data-theme="dark"] .login-form .btn-submit:disabled,
+html[data-theme="dark"] .reg-form .btn-submit:disabled,
+html[data-theme="dark"] .reg-form button:disabled {
+  background: #3a5566 !important;
+  color: #a8c0d0 !important;
+  opacity: 0.85;
+}
+html[data-theme="dark"] .reg-form .btn-prev {
+  background: var(--dm-panel-soft) !important;
+  color: var(--dm-text) !important;
+  border-radius: 10px !important;
+}
+html[data-theme="dark"] .login-form .switch-auth,
+html[data-theme="dark"] .reg-form .switch-auth {
+  color: var(--dm-muted) !important;
+}
+html[data-theme="dark"] .login-form .link-btn,
+html[data-theme="dark"] .reg-form .link-btn {
+  color: var(--dm-accent) !important;
+}
+html[data-theme="dark"] .login-form .error-message,
+html[data-theme="dark"] .reg-form .error-message,
+html[data-theme="dark"] .reg-form .field-error {
+  color: #ff8297 !important;
+}
+html[data-theme="dark"] .reg-form .steps-indicator span {
+  color: #6b7f90 !important;
+}
+html[data-theme="dark"] .reg-form .steps-indicator span.active {
+  color: var(--dm-accent) !important;
+  border-bottom-color: var(--dm-accent) !important;
+}
+html[data-theme="dark"] .reg-form .consent-row {
+  color: #b0bec8 !important;
+}
+html[data-theme="dark"] .reg-form .consent-ui {
+  border-color: var(--dm-border) !important;
+  background: var(--dm-panel-raised) !important;
+}
+html[data-theme="dark"] .reg-form .consent-checkbox:checked + .consent-ui {
+  border-color: var(--dm-accent) !important;
+  background: linear-gradient(135deg, #38bdf8, #0da3f1) !important;
+}
+html[data-theme="dark"] .login-logo {
+  border-radius: 12px;
+  background: transparent;
+}
 
 /* Reliable messenger theme overrides: target the components actually rendered. */
 html[data-theme="dark"] .app-shell,
@@ -492,6 +622,20 @@ html[data-theme="dark"] textarea:focus-visible {
   outline-color: #55b8e8 !important;
 }
 
+
+
+html[data-theme="dark"] .messages,
+html[data-theme="dark"] .chat-window .messages,
+html[data-theme="dark"] .chat-window {
+  background-image: none !important;
+  background-color: #12181f !important;
+}
+html[data-theme="dark"] .sidebar .header,
+html[data-theme="dark"] .chat-window > .header {
+  border-top: none !important;
+  box-shadow: none !important;
+}
+
 /* —— Убираем голубой ореол по бокам и под шапками —— */
 html[data-theme="dark"] .profile-overlay {
   box-shadow: -10px 0 28px rgba(0, 0, 0, 0.35) !important;
@@ -537,4 +681,19 @@ html[data-theme="dark"] .chat-window .bubble.me:not(.no-halo):not(.sticker):not(
 html[data-theme="dark"] .sidebar .chat.active {
   box-shadow: inset 3px 0 0 #3d8eb8 !important;
   background: #1a2e3d !important;
+}
+
+
+
+html[data-theme="dark"],
+html[data-theme="light"],
+body,
+#app {
+  border: 0 !important;
+  border-width: 0 !important;
+  border-style: none !important;
+  border-color: transparent !important;
+  outline: 0 !important;
+  outline-width: 0 !important;
+  box-shadow: none !important;
 }

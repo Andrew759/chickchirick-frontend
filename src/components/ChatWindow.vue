@@ -342,9 +342,7 @@ watch(
   flex: 1;
   display: flex;
   flex-direction: column;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(125, 211, 252, .16), transparent 38%),
-    #eef8ff;
+  background: #f0f2f5;
   min-width: 0;
 }
 
@@ -357,7 +355,7 @@ watch(
   background: rgba(248, 252, 255, .94);
   font-weight: 600;
   border-bottom: 1px solid rgba(42, 171, 238, .16);
-  box-shadow: 0 2px 10px rgba(42, 171, 238, .06);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, .06);
   backdrop-filter: blur(12px);
   flex-shrink: 0;
 }
@@ -461,10 +459,8 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 7px;
-  background-image:
-    linear-gradient(rgba(42, 171, 238, .025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(42, 171, 238, .025) 1px, transparent 1px);
-  background-size: 28px 28px;
+  background-image: none;
+  background-color: inherit;
 }
 
 
@@ -476,7 +472,7 @@ watch(
   border: 1px solid rgba(42, 171, 238, .08);
   border-radius: 10px 10px 10px 3px;
   padding: 6px 10px 4px;
-  box-shadow: 0 2px 8px rgba(30, 90, 120, .06);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .06);
 }
 
 .bubble.me {
@@ -484,7 +480,7 @@ watch(
   background: linear-gradient(135deg, #e5f7ff, #d7f1ff);
   border-color: rgba(42, 171, 238, .18);
   border-radius: 10px 10px 3px 10px;
-  box-shadow: 0 2px 10px rgba(42, 171, 238, .09);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, .08);
 }
 
 /* Стикеры — без ореола/пузыря */

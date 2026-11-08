@@ -242,24 +242,5 @@ input:focus {
   }
 }
 
-/* Тёмная тема — форма входа */
-:global(html[data-theme="dark"]) .login-container {
-  background: #12181f !important;
-}
-:global(html[data-theme="dark"]) .login-form {
-  background: #1a222c !important;
-  color: #e6edf3 !important;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35) !important;
-}
-:global(html[data-theme="dark"]) .login-form label {
-  color: #c0ccd6 !important;
-}
-:global(html[data-theme="dark"]) .login-form input {
-  background: #222b36 !important;
-  color: #e6edf3 !important;
-  border-color: #2a333e !important;
-}
-:global(html[data-theme="dark"]) .login-form input::placeholder {
-  color: #8195a5 !important;
-}
+/* Тёмная тема: глобально в style.css */
 </style>

@@ -305,13 +305,21 @@ function handleEvent(event) {
   position: relative;
   height: 100vh;
   height: 100dvh;
+  width: 100%;
   overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: #f0f2f5;
 }
 .layout {
   display: flex;
   height: 100%;
-  background: #eef8ff;
+  width: 100%;
+  background: #f0f2f5;
   position: relative;
+  margin: 0;
+  border: none;
 }
 .main-column {
   flex: 1;
@@ -349,9 +357,14 @@ function handleEvent(event) {
   background: #f0f2f5;
   height: 100vh;
   height: 100dvh;
-  width: 100vw;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  margin: 0;
+  padding: 0;
+  border: none;
 }
 
 /* —— Mobile: один экран (v-if в шаблоне, без display:none) —— */
@@ -371,7 +384,7 @@ function handleEvent(event) {
     position: absolute;
     inset: 0;
     z-index: 20;
-    background: #eef8ff;
+    background: #f0f2f5;
     width: 100%;
     height: 100%;
     display: flex;

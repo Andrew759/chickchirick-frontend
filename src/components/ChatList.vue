@@ -807,7 +807,7 @@ function openChatAvatar(chat) {
   }
 
   .chat:active {
-    background: #eef8ff;
+    background: #f0f2f5;
   }
 
   .chat.active {
