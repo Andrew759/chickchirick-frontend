@@ -1013,8 +1013,8 @@ onMounted(() => {
 /* Кнопка «+ Добавить музыку» — не белая в dark */
 :global(html[data-theme="dark"]) .btn-add-music {
   background: #222b36 !important;
-  //TODO: это правило все ломает
-  //border: 1px dashed #3d8eb8 !important;
+  /* TODO: это правило все ломает */
+  /* border: 1px dashed #3d8eb8 !important; */
   color: #75ccf8 !important;
 }
 
