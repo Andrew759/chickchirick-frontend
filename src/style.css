@@ -466,7 +466,6 @@ html[data-theme="dark"] .profile-header,
 html[data-theme="dark"] .profile-content,
 html[data-theme="dark"] .profile-info,
 html[data-theme="dark"] .section,
-html[data-theme="dark"] .music-row,
 html[data-theme="dark"] .photos-grid,
 html[data-theme="dark"] .music-list {
   background: var(--dm-panel);
@@ -481,6 +480,36 @@ html[data-theme="dark"] .profile-container .info-group,
 html[data-theme="dark"] .public-profile .info-group {
   border-bottom-color: var(--dm-border);
 }
+
+/* Music rows in profile — tokens drive scoped styles, no !important fight */
+html[data-theme="dark"] {
+  --music-row-bg: #222b36;
+  --music-row-active-bg: #173b50;
+  --music-row-active-shadow: inset 0 0 0 1px rgba(42, 171, 238, 0.35);
+}
+html[data-theme="dark"] .music-row {
+  color: var(--dm-text);
+}
+html[data-theme="dark"] .music-row .track-name {
+  color: var(--dm-text);
+}
+html[data-theme="dark"] .music-row.active .track-name {
+  color: #eaf7ff;
+}
+html[data-theme="dark"] .music-row .track-hint {
+  color: var(--dm-muted);
+}
+html[data-theme="dark"] .music-row.active .track-hint {
+  color: #9ec9e0;
+}
+html[data-theme="dark"] .music-row .btn-remove-track {
+  color: #8fa3b5;
+}
+html[data-theme="dark"] .music-row .btn-remove-track:hover {
+  color: #ff5c7a;
+  background: rgba(196, 30, 58, 0.15);
+}
+
 html[data-theme="dark"] .profile-container .section-title,
 html[data-theme="dark"] .public-profile .section-title,
 html[data-theme="dark"] .profile-container .name,

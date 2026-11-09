@@ -797,14 +797,15 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #f4f4f5;
+  background: var(--music-row-bg, #f4f4f5);
   border-radius: 12px;
   padding: 8px 6px 8px 8px;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .music-row.active {
-  background: #e3f2fd;
+  background: var(--music-row-active-bg, #e3f2fd);
+  box-shadow: var(--music-row-active-shadow, none);
 }
 
 .btn-track-play {
