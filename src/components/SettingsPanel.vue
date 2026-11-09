@@ -49,20 +49,14 @@ defineEmits(['close', 'change-theme'])
 .settings-section-icon{font-size:19px}.settings-chevron{margin-left:auto}
 .appearance-content{padding:16px 8px 18px}
 .appearance-label{font-size:13px;font-weight:700;margin-bottom:12px}
-.theme-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.theme-card{position:relative;min-height:92px;border:1px solid #dce6ee;border-radius:12px;background:#f8fafc;color:#526579;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;font:inherit;font-size:13px;cursor:pointer}
-.theme-card.selected{border:2px solid #2aabee;background:#edf8ff;color:#168dcc;font-weight:700}
-.theme-preview{font-size:25px;line-height:1}.dark-preview{color:#2aabee}.theme-check{position:absolute;right:7px;top:6px;color:#fff;background:#2aabee;border-radius:50%;width:19px;height:19px;display:grid;place-items:center;font-size:12px}
-.appearance-help{font-size:12px;line-height:1.5;color:#8293a3;margin:12px 0 0}
+/* theme-choice / theme-card / appearance-help — shared in style.css */
 .settings-row{display:flex;align-items:center;gap:13px;padding:15px 10px;border-top:1px solid #e6edf3;font-size:14px}
 .settings-row>span{font-size:21px;color:#8293a3}.settings-row div{display:flex;flex-direction:column;gap:4px;flex:1}.settings-row small{color:#8293a3}.settings-row b{font-size:20px;color:#8293a3}
 :global(html[data-theme="dark"]) .settings-drawer{background:#1a222c;color:#e6edf3}
 :global(html[data-theme="dark"]) .settings-head{background:#14202b;border-color:#2a333e}
 :global(html[data-theme="dark"]) .settings-head h2,:global(html[data-theme="dark"]) .settings-profile strong,:global(html[data-theme="dark"]) .appearance-label,:global(html[data-theme="dark"]) .settings-row strong{color:#e6edf3}
 :global(html[data-theme="dark"]) .settings-profile{border-color:#2a333e}
-:global(html[data-theme="dark"]) .settings-profile p,:global(html[data-theme="dark"]) .appearance-help,:global(html[data-theme="dark"]) .settings-row small{color:#b4c2ce}
+:global(html[data-theme="dark"]) .settings-profile p,:global(html[data-theme="dark"]) .settings-row small{color:#b4c2ce}
 :global(html[data-theme="dark"]) .settings-section{background:#203747;color:#75ccf8}
-:global(html[data-theme="dark"]) .theme-card{background:#1c2c39;color:#c5d1dc;border-color:#3a4d5c}
-:global(html[data-theme="dark"]) .theme-card.selected{background:#173b50;color:#75ccf8;border-color:#2aabee}
 :global(html[data-theme="dark"]) .settings-row{border-color:#2a333e}
 </style>

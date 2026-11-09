@@ -130,8 +130,17 @@ html[data-theme="dark"] .sm-head,
 html[data-theme="dark"] .picker-head,
 html[data-theme="dark"] .profile-header,
 html[data-theme="dark"] .section,
-html[data-theme="dark"] .music-row,
-html[data-theme="dark"] .photo-tile { border-color: var(--dm-border) !important; }
+html[data-theme="dark"] .music-row { border-color: var(--dm-border); }
+html[data-theme="dark"] .photo-tile:not(.photo-add) { border-color: var(--dm-border); }
+html[data-theme="dark"] .photo-tile.photo-add {
+  background: transparent;
+  border: 2px dashed #3a4d5c;
+  color: var(--dm-muted);
+}
+html[data-theme="dark"] .photo-tile.photo-add:hover:not(:disabled) {
+  border-color: var(--dm-accent);
+  background: #1a2e3d;
+}
 html[data-theme="dark"] .sm-field,
 html[data-theme="dark"] .sm-emoji-input,
 html[data-theme="dark"] .sm-cell,
@@ -450,7 +459,7 @@ html[data-theme="dark"] .info-group p {
   color: var(--dm-text) !important;
 }
 
-/* Profile and public profile panels: remove hard-coded white surfaces and dim grey text. */
+/* Profile and public profile panels: surfaces only (not buttons/cards). */
 html[data-theme="dark"] .profile-container,
 html[data-theme="dark"] .public-profile,
 html[data-theme="dark"] .profile-header,
@@ -459,15 +468,18 @@ html[data-theme="dark"] .profile-info,
 html[data-theme="dark"] .section,
 html[data-theme="dark"] .music-row,
 html[data-theme="dark"] .photos-grid,
-html[data-theme="dark"] .photo-tile,
 html[data-theme="dark"] .music-list {
-  background: var(--dm-panel) !important;
-  color: var(--dm-text) !important;
-  border-color: var(--dm-border) !important;
-}
-html[data-theme="dark"] .profile-container *,
-html[data-theme="dark"] .public-profile * {
+  background: var(--dm-panel);
+  color: var(--dm-text);
   border-color: var(--dm-border);
+}
+html[data-theme="dark"] .photo-tile:not(.photo-add) {
+  background: var(--dm-panel);
+  border-color: var(--dm-border);
+}
+html[data-theme="dark"] .profile-container .info-group,
+html[data-theme="dark"] .public-profile .info-group {
+  border-bottom-color: var(--dm-border);
 }
 html[data-theme="dark"] .profile-container .section-title,
 html[data-theme="dark"] .public-profile .section-title,
@@ -490,6 +502,147 @@ html[data-theme="dark"] .profile-container .info-group input {
 html[data-theme="dark"] .profile-container input::placeholder,
 html[data-theme="dark"] .profile-container textarea::placeholder {
   color: #c0ccd6 !important;
+}
+
+/* ── Shared theme cards + profile action buttons (one source of truth) ── */
+.theme-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+.theme-card {
+  position: relative;
+  min-height: 92px;
+  border: 1px solid #dce6ee;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #526579;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 12px 8px;
+}
+.theme-card.selected {
+  border: 2px solid #2aabee;
+  background: #edf8ff;
+  color: #168dcc;
+  font-weight: 700;
+}
+.theme-preview {
+  font-size: 25px;
+  line-height: 1;
+}
+.theme-preview.dark-preview,
+.dark-preview {
+  color: #2aabee;
+}
+.theme-check {
+  position: absolute;
+  right: 7px;
+  top: 6px;
+  color: #fff;
+  background: #2aabee;
+  border-radius: 50%;
+  width: 19px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+}
+.theme-help,
+.appearance-help {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #8293a3;
+  margin: 12px 0 0;
+}
+
+html[data-theme="dark"] .theme-card {
+  background: #1c2c39;
+  color: #c5d1dc;
+  border-color: #3a4d5c;
+}
+html[data-theme="dark"] .theme-card:hover:not(.selected) {
+  background: #223442;
+  border-color: #4a6070;
+  color: #d0dce8;
+}
+html[data-theme="dark"] .theme-card.selected {
+  background: #173b50;
+  color: #75ccf8;
+  border-color: #2aabee;
+}
+html[data-theme="dark"] .theme-help,
+html[data-theme="dark"] .appearance-help {
+  color: #b4c2ce;
+}
+
+/* Logout — light default, dark surfaces in dark theme */
+.btn-logout {
+  margin-top: 24px;
+  width: 100%;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #ea0038;
+  color: #ea0038;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+.btn-logout:hover:not(:disabled) {
+  background: #ea0038;
+  color: #fff;
+}
+.btn-logout:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+html[data-theme="dark"] .btn-logout {
+  background: #1a222c;
+  border-color: #c41e3a;
+  color: #ff5c7a;
+}
+html[data-theme="dark"] .btn-logout:hover:not(:disabled) {
+  background: #c41e3a;
+  border-color: #c41e3a;
+  color: #fff;
+}
+
+/* «+ Добавить музыку» */
+.btn-add-music {
+  width: 100%;
+  padding: 10px;
+  border: 1px dashed #2aabee;
+  border-radius: 10px;
+  background: #f0f8ff;
+  color: #2aabee;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.btn-add-music:hover:not(:disabled) {
+  background: #e3f2fd;
+}
+.btn-add-music:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+html[data-theme="dark"] .btn-add-music {
+  background: #222b36;
+  color: #75ccf8;
+  border-color: #3d8eb8;
+}
+html[data-theme="dark"] .btn-add-music:hover:not(:disabled) {
+  background: #2a3440;
 }
 
 /* Sticker manager, picker, upload forms and dialogs */
