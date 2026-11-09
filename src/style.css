@@ -697,3 +697,11 @@ body,
   outline-width: 0 !important;
   box-shadow: none !important;
 }
+
+/* Убираем тень времени сообщений в светлой теме. */
+html:not([data-theme="dark"]) .chat-window .bubble.no-halo .time,
+html:not([data-theme="dark"]) .chat-window .bubble.sticker .time,
+html:not([data-theme="dark"]) .chat-window .bubble.voice .time,
+html:not([data-theme="dark"]) .chat-window .bubble.video-note .time {
+  text-shadow: none !important;
+}
