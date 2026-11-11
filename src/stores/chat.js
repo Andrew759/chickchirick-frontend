@@ -293,12 +293,16 @@ export const useChatStore = defineStore('chat', {
 
         if (!chatMap.has(chatId)) {
           if (groupId) {
+            // сохраняем title/avatar, если уже были в state (или подтянутся loadGroupChats)
+            const prev = this.chats.find((c) => c.id === chatId)
             chatMap.set(chatId, {
               id: chatId,
               groupId,
               type: 'group',
               isGroup: true,
-              name: 'Группа',
+              name: prev?.name && prev.name !== 'Группа' ? prev.name : (prev?.name || 'Группа'),
+              avatarFileUuid: prev?.avatarFileUuid || null,
+              memberCount: prev?.memberCount || 0,
               messages: []
             })
           } else {
@@ -348,6 +352,17 @@ export const useChatStore = defineStore('chat', {
       }
 
       const nextChats = Array.from(chatMap.values())
+
+      // группы без сообщений в history, но уже известные в state — не теряем
+      for (const prev of this.chats) {
+        if (!prev?.isGroup && !String(prev?.id || '').startsWith('group:')) continue
+        if (chatMap.has(prev.id)) continue
+        nextChats.push({
+          ...prev,
+          messages: prev.messages || []
+        })
+      }
+
       for (const chat of nextChats) {
         sortChatMessages(chat)
       }

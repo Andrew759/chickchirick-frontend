@@ -129,7 +129,7 @@ async function checkAuth() {
       initChatSession()
 
       await loadMessageHistory()
-      await Promise.all([loadChatNames(), loadMyProfileAvatar(result)])
+      await Promise.all([loadChatNames(), loadMyProfileAvatar(result), loadGroupChats()])
     } else {
       store.setAuthenticated(false)
     }
@@ -197,11 +197,23 @@ async function loadGroupChats() {
   }
 }
 
-/** Подтянуть имя + фамилию собеседников в список чатов */
+/** Подтянуть имя + фамилию собеседников (и отправителей в группах) */
 async function loadChatNames() {
   try {
-    const ids = store.chats.map((c) => c.id)
-    const users = await resolveChatUsers(ids)
+    const ids = new Set()
+    for (const c of store.chats) {
+      // личные чаты: id = messages-local user id
+      if (typeof c.id === 'number' || (typeof c.id === 'string' && !String(c.id).startsWith('group:'))) {
+        const n = Number(c.id)
+        if (n) ids.add(n)
+      }
+      // отправители сообщений в группе
+      for (const m of c.messages || []) {
+        const sid = Number(m.senderId)
+        if (sid && sid !== store.myUserId) ids.add(sid)
+      }
+    }
+    const users = await resolveChatUsers([...ids])
     store.setUsersInfo(users)
   } catch (e) {
     console.warn('Не удалось загрузить имена чатов:', e)

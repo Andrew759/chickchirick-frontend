@@ -1,133 +1,227 @@
 <template>
   <div
     :class="[
-      'bubble',
-      msg.fromMe ? 'me' : '',
-      isSticker ? 'sticker' : '',
-      msg.isVoiceMessage ? 'voice' : '',
-      msg.isVideoNote ? 'video-note' : '',
-      noHalo ? 'no-halo' : ''
+      'msg-wrap',
+      msg.fromMe ? 'me' : 'peer',
+      isGroup ? 'group' : 'direct',
+      showSenderMeta ? 'with-sender' : '',
+      isContinuation ? 'continuation' : ''
     ]"
   >
-    <div class="bubble-row">
-      <div class="content">
-        <div v-if="msg.fileUuid" class="attachment">
-          <button
-            v-if="isSticker"
-            type="button"
-            class="img-link sticker-link"
-            @click.stop="onStickerClick"
-          >
-            <img
-              :src="fileUrl"
-              :alt="msg.fileName || 'sticker'"
-              class="msg-sticker"
-              loading="lazy"
-              draggable="false"
-            />
-          </button>
-          <button
-            v-else-if="msg.isImage"
-            type="button"
-            class="img-link"
-            @click.stop="$emit('open-photo', msg)"
-          >
-            <img
-              :src="fileUrl"
-              :alt="msg.fileName || 'image'"
-              class="msg-image"
-              loading="lazy"
-            />
-          </button>
-          <VideoNotePlayer
-            v-else-if="msg.isVideoNote"
-            :src="fileUrl"
-            @click.stop
-          />
-          <button
-            v-else-if="msg.isVideo"
-            type="button"
-            class="video-link"
-            @click.stop="$emit('open-video', msg)"
-          >
-            <video
-              :src="fileUrl"
-              class="msg-video-preview"
-              muted
-              preload="metadata"
-              playsinline
-            />
-            <span class="video-play" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="24" height="24">
-                <path fill="currentColor" d="M8 5v14l11-7z" />
-              </svg>
-            </span>
-          </button>
-          <VoiceMessagePlayer
-            v-else-if="msg.isVoiceMessage"
-            :src="fileUrl"
-            :from-me="msg.fromMe"
-            :queue="queue"
-          />
-          <AudioPlayer
-            v-else-if="msg.isAudio"
-            :src="fileUrl"
-            :file-name="msg.fileName || 'audio'"
-            :from-me="msg.fromMe"
-          />
-          <a
-            v-else
-            :href="fileUrl"
-            :download="msg.fileName || 'file'"
-            target="_blank"
-            rel="noopener"
-            class="file-link"
-          >
-            📄 {{ msg.fileName || 'Файл' }}
-          </a>
-        </div>
-        <div v-if="showText" class="text">{{ displayText }}</div>
-      </div>
+    <!-- Аватар слева (только входящие в группе) -->
+    <div v-if="isGroup && !msg.fromMe" class="sender-avatar-col">
       <button
-        v-if="msg.fromMe"
+        v-if="showSenderMeta"
         type="button"
-        class="btn-delete"
-        title="Удалить сообщение"
-        @click.stop="$emit('delete', msg)"
+        class="sender-avatar"
+        :style="{ background: senderColor }"
+        :title="senderName"
+        @click.stop="$emit('open-sender', msg.senderId)"
       >
-        ×
+        <img v-if="senderAvatarUrl" :src="senderAvatarUrl" alt="" />
+        <span v-else>{{ senderLetter }}</span>
       </button>
+      <span v-else class="sender-avatar-spacer" aria-hidden="true" />
     </div>
-    <div class="time">{{ timeLabel }}</div>
+
+    <div
+      :class="[
+        'bubble',
+        msg.fromMe ? 'me' : '',
+        isSticker ? 'sticker' : '',
+        msg.isVoiceMessage ? 'voice' : '',
+        msg.isVideoNote ? 'video-note' : '',
+        noHalo ? 'no-halo' : ''
+      ]"
+    >
+      <!-- Имя отправителя над пузырём (Telegram-style) -->
+      <div
+        v-if="showSenderMeta"
+        class="sender-name"
+        :style="{ color: senderColor }"
+        @click.stop="$emit('open-sender', msg.senderId)"
+      >
+        {{ senderName }}
+      </div>
+
+      <div class="bubble-row">
+        <div class="content">
+          <div v-if="msg.fileUuid" class="attachment">
+            <button
+              v-if="isSticker"
+              type="button"
+              class="img-link sticker-link"
+              @click.stop="onStickerClick"
+            >
+              <img
+                :src="fileUrl"
+                :alt="msg.fileName || 'sticker'"
+                class="msg-sticker"
+                loading="lazy"
+                draggable="false"
+              />
+            </button>
+            <button
+              v-else-if="msg.isImage"
+              type="button"
+              class="img-link"
+              @click.stop="$emit('open-photo', msg)"
+            >
+              <img
+                :src="fileUrl"
+                :alt="msg.fileName || 'image'"
+                class="msg-image"
+                loading="lazy"
+              />
+            </button>
+            <VideoNotePlayer
+              v-else-if="msg.isVideoNote"
+              :src="fileUrl"
+              @click.stop
+            />
+            <button
+              v-else-if="msg.isVideo"
+              type="button"
+              class="video-link"
+              @click.stop="$emit('open-video', msg)"
+            >
+              <video
+                :src="fileUrl"
+                class="msg-video-preview"
+                muted
+                preload="metadata"
+                playsinline
+              />
+              <span class="video-play" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <path fill="currentColor" d="M8 5v14l11-7z" />
+                </svg>
+              </span>
+            </button>
+            <VoiceMessagePlayer
+              v-else-if="msg.isVoiceMessage"
+              :src="fileUrl"
+              :from-me="msg.fromMe"
+              :queue="queue"
+            />
+            <AudioPlayer
+              v-else-if="msg.isAudio"
+              :src="fileUrl"
+              :file-name="msg.fileName || 'audio'"
+              :from-me="msg.fromMe"
+            />
+            <a
+              v-else
+              :href="fileUrl"
+              :download="msg.fileName || 'file'"
+              target="_blank"
+              rel="noopener"
+              class="file-link"
+            >
+              📄 {{ msg.fileName || 'Файл' }}
+            </a>
+          </div>
+          <div v-if="showText" class="text">{{ displayText }}</div>
+        </div>
+        <button
+          v-if="msg.fromMe"
+          type="button"
+          class="btn-delete"
+          title="Удалить сообщение"
+          @click.stop="$emit('delete', msg)"
+        >
+          ×
+        </button>
+      </div>
+      <div class="time">{{ timeLabel }}</div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
-import { formatMessageTime } from '../stores/chat'
+import { formatMessageTime, useChatStore } from '../stores/chat'
 import { getFileUrl } from '../services/files'
 import AudioPlayer from './AudioPlayer.vue'
 import VoiceMessagePlayer from './VoiceMessagePlayer.vue'
 import VideoNotePlayer from './VideoNotePlayer.vue'
 
+/** Палитра как в Telegram — стабильный цвет по id */
+const SENDER_COLORS = [
+  '#e17076', '#faa774', '#a695e7', '#7bc862',
+  '#6ec9cb', '#65aadd', '#ee7aae', '#eeb620'
+]
+
 const props = defineProps({
   msg: { type: Object, required: true },
-  queue: { type: Array, default: () => [] }
+  queue: { type: Array, default: () => [] },
+  /** Групповой чат — показывать аватар и имя */
+  isGroup: { type: Boolean, default: false },
+  /** Предыдущее сообщение в ленте (для склейки от одного автора) */
+  prevMsg: { type: Object, default: null }
 })
 
-const emit = defineEmits(['open-photo', 'open-video', 'open-sticker', 'delete'])
+const emit = defineEmits(['open-photo', 'open-video', 'open-sticker', 'delete', 'open-sender'])
+
+const store = useChatStore()
 
 const fileUrl = computed(() => getFileUrl(props.msg.fileUuid))
 const timeLabel = computed(() => formatMessageTime(props.msg.createdAt) || '·')
 
-/** Стикер: caption (эмодзи) под картинкой не показываем */
+const senderId = computed(() => Number(props.msg.senderId) || 0)
+
+const senderUser = computed(() => {
+  if (!senderId.value) return null
+  return store.usersById[senderId.value] || null
+})
+
+function displayName(user) {
+  if (!user || typeof user !== 'object') return null
+  const name = (user.name || user.firstName || user.first_name || '').trim()
+  const surname = (user.surname || user.lastName || user.last_name || '').trim()
+  const full = `${name} ${surname}`.trim()
+  if (full) return full
+  if (user.login) return `@${user.login}`
+  return null
+}
+
+const senderName = computed(() => {
+  return displayName(senderUser.value) || (senderId.value ? `User ${senderId.value}` : 'Участник')
+})
+
+const senderLetter = computed(() => {
+  const n = (senderName.value || '?').trim()
+  return (n[0] || '?').toUpperCase()
+})
+
+const senderAvatarUrl = computed(() => {
+  const uuid = senderUser.value?.avatarFileUuid
+  return uuid ? getFileUrl(uuid) : ''
+})
+
+const senderColor = computed(() => {
+  const id = senderId.value || 0
+  return SENDER_COLORS[Math.abs(id) % SENDER_COLORS.length]
+})
+
+/** Скрыть имя/аватар, если предыдущее сообщение от того же автора (цепочка) */
+const isContinuation = computed(() => {
+  if (!props.isGroup || props.msg.fromMe) return false
+  const prev = props.prevMsg
+  if (!prev || prev.fromMe) return false
+  return Number(prev.senderId) === senderId.value
+})
+
+const showSenderMeta = computed(() => {
+  return props.isGroup && !props.msg.fromMe && !isContinuation.value
+})
+
 const isSticker = computed(() => {
   if (!props.msg.fileUuid) return false
   const name = props.msg.fileName || ''
   return /^sticker-/i.test(name) || props.msg.isSticker === true
 })
 
-/** Вложения без голубого пузыря: стикер, голос, видеокружок, фото, видео, файл */
 const noHalo = computed(() => {
   if (!props.msg.fileUuid) return false
   if (isSticker.value) return true
@@ -138,7 +232,6 @@ const noHalo = computed(() => {
 
 function onStickerClick() {
   emit('open-sticker', props.msg)
-  // fallback: если родитель не слушает open-sticker
   emit('open-photo', props.msg)
 }
 
@@ -158,23 +251,105 @@ const displayText = computed(() => {
 </script>
 
 <style scoped>
+.msg-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.msg-wrap.me {
+  flex-direction: row-reverse;
+}
+
+.msg-wrap.continuation {
+  margin-top: -4px;
+}
+
+.msg-wrap.with-sender {
+  margin-top: 10px;
+}
+
+.sender-avatar-col {
+  width: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 2px;
+}
+
+.sender-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.sender-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.sender-avatar-spacer {
+  width: 36px;
+  height: 36px;
+}
+
+.sender-name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  margin-bottom: 3px;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sender-name:hover {
+  text-decoration: underline;
+}
+
 .bubble {
   position: relative;
-  max-width: 70%;
+  max-width: min(70%, 420px);
   padding: 8px 12px;
   border-radius: 14px;
   background: #fff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, .06);
-  align-self: flex-start;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
   word-break: break-word;
+  min-width: 0;
+}
+
+.msg-wrap.peer .bubble {
+  border-top-left-radius: 6px;
+}
+
+.msg-wrap.peer.continuation .bubble {
+  border-top-left-radius: 14px;
+}
+
+.msg-wrap.me .bubble {
+  border-top-right-radius: 6px;
 }
 
 .bubble.me {
-  align-self: flex-end;
   background: linear-gradient(135deg, #dff6ff, #c9efff);
 }
 
-/* Вложения — без голубого пузыря */
 .bubble.no-halo,
 .bubble.no-halo.me,
 .bubble.sticker,
@@ -302,7 +477,7 @@ const displayText = computed(() => {
   display: grid;
   place-items: center;
   color: #fff;
-  background: rgba(0, 0, 0, .25);
+  background: rgba(0, 0, 0, 0.25);
   border-radius: 10px;
 }
 
@@ -319,7 +494,7 @@ const displayText = computed(() => {
 
 @media (max-width: 768px) {
   .bubble {
-    max-width: 88%;
+    max-width: min(88%, 360px);
   }
   .msg-image,
   .msg-video-preview {
@@ -328,5 +503,30 @@ const displayText = computed(() => {
   .bubble.me .btn-delete {
     opacity: 0.55;
   }
+  .sender-avatar,
+  .sender-avatar-spacer {
+    width: 32px;
+    height: 32px;
+  }
+  .sender-avatar-col {
+    width: 32px;
+  }
+}
+
+/* Dark theme */
+:global(html[data-theme="dark"]) .text {
+  color: #e6edf3;
+}
+
+:global(html[data-theme="dark"]) .time {
+  color: #91a4b4;
+}
+
+:global(html[data-theme="dark"]) .bubble:not(.me):not(.no-halo) {
+  background: #20313f !important;
+}
+
+:global(html[data-theme="dark"]) .bubble.me:not(.no-halo) {
+  background: #174968 !important;
 }
 </style>

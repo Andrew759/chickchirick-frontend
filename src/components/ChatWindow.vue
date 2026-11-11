@@ -12,28 +12,42 @@
           <path fill="currentColor" d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
         </svg>
       </button>
-      <button type="button" class="chat-profile-trigger" @click="emit('open-profile', { id: chat.id, ...chatUser })">
+      <button
+        type="button"
+        class="chat-profile-trigger"
+        @click="isGroupChat ? null : emit('open-profile', { id: chat.id, ...chatUser })"
+      >
         <span class="chat-profile-avatar">
-          <img v-if="chatUser.avatarFileUuid" :src="getFileUrl(chatUser.avatarFileUuid)" alt="" />
+          <img
+            v-if="isGroupChat ? chat.avatarFileUuid : chatUser.avatarFileUuid"
+            :src="getFileUrl(isGroupChat ? chat.avatarFileUuid : chatUser.avatarFileUuid)"
+            alt=""
+          />
           <span v-else>{{ (chat.name || '?').charAt(0).toUpperCase() }}</span>
         </span>
         <span class="chat-title">
           <span class="chat-name">{{ chat.name }}</span>
-          <span v-if="isPeerTyping" class="typing-status">печатает...</span>
+          <span v-if="isGroupChat && chat.memberCount" class="typing-status">
+            {{ chat.memberCount }} участников
+          </span>
+          <span v-else-if="isPeerTyping" class="typing-status">печатает...</span>
         </span>
       </button>
     </div>
 
     <div class="messages" ref="messagesEl">
       <MessageBubble
-        v-for="msg in chat.messages"
-        :key="'msg-' + msg.id"
+        v-for="(msg, idx) in chat.messages"
+        :key="'msg-' + (msg.id ?? idx)"
         :msg="msg"
         :queue="voiceQueue"
+        :is-group="isGroupChat"
+        :prev-msg="idx > 0 ? chat.messages[idx - 1] : null"
         @open-photo="openPhoto"
         @open-video="openVideo"
         @open-sticker="openSticker"
         @delete="handleDelete"
+        @open-sender="onOpenSender"
       />
     </div>
 
@@ -60,6 +74,7 @@ import { computed, ref, watch, nextTick } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { sendMessage, sendTyping, requestDeleteMessage } from '../services/socket'
 import { isGroupChatId, parseGroupUuid, sendGroupMessage } from '../services/groups'
+import { resolveChatUsers } from '../services/users'
 import { uploadFile, linkFileToMessage, getFileUrl } from '../services/files'
 import { buildFileMessageText } from '../services/fileMarker'
 import {
@@ -77,7 +92,43 @@ import { usePlayerStore } from '../stores/player'
 const store = useChatStore()
 const player = usePlayerStore()
 const chat = computed(() => store.activeChat)
+const isGroupChat = computed(() => isGroupChatId(chat.value?.id) || chat.value?.isGroup === true)
 
+/** Подтянуть имена/аватары отправителей групповых сообщений */
+async function loadGroupSenders() {
+  if (!isGroupChat.value || !chat.value?.messages?.length) return
+  const ids = [
+    ...new Set(
+      chat.value.messages
+        .map((m) => Number(m.senderId))
+        .filter((id) => id && id !== store.myUserId && !store.usersById[id])
+    )
+  ]
+  if (!ids.length) return
+  try {
+    const users = await resolveChatUsers(ids)
+    store.setUsersInfo(users)
+  } catch (e) {
+    console.warn('loadGroupSenders:', e)
+  }
+}
+
+watch(
+  () => [chat.value?.id, chat.value?.messages?.length],
+  () => {
+    loadGroupSenders()
+  },
+  { immediate: true }
+)
+
+function onOpenSender(senderId) {
+  const id = Number(senderId)
+  if (!id) return
+  const user = store.usersById[id]
+  if (user) {
+    emit('open-profile', { id, ...user })
+  }
+}
 
 const voiceQueue = computed(() =>
   (chat.value?.messages || [])
