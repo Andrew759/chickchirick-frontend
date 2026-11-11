@@ -105,10 +105,16 @@ html[data-theme="dark"] input,
 html[data-theme="dark"] textarea { color: var(--dm-text); }
 html[data-theme="dark"] input::placeholder,
 html[data-theme="dark"] textarea::placeholder { color: #8195a5; }
-html[data-theme="dark"] .bubble:not(.me):not(.no-halo) .content,
+html[data-theme="dark"] .bubble:not(.me):not(.no-halo),
 html[data-theme="dark"] .msg-bubble:not(.me):not(.no-halo) { background: #20313f !important; color: #e3edf5 !important; }
 html[data-theme="dark"] .msg-bubble.me:not(.no-halo),
-html[data-theme="dark"] .bubble.me:not(.no-halo) .content { background: #174968 !important; color: #eaf7ff !important; }
+html[data-theme="dark"] .bubble.me:not(.no-halo) { background: #174968 !important; color: #eaf7ff !important; }
+/* .content внутри пузыря — без своего фона (иначе «выделение» текстового поля) */
+html[data-theme="dark"] .bubble .content,
+html[data-theme="dark"] .bubble.me .content,
+html[data-theme="dark"] .msg-bubble .content {
+  background: transparent !important;
+}
 html[data-theme="dark"] .global-player,
 html[data-theme="dark"] .audio-player,
 html[data-theme="dark"] .voice-message,
