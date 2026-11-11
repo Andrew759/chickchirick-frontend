@@ -59,6 +59,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 const _savedTheme = localStorage.getItem('messenger-theme') === 'dark' ? 'dark' : 'light'
 document.documentElement.dataset.theme = _savedTheme
 import { connectSocket, subscribe } from './services/socket'
+import { listMyGroups } from './services/groups'
 import {
   resolveChatUsers,
   fetchUserByUuid,
@@ -185,6 +186,17 @@ async function loadMessageHistory() {
   await store.setHistory(history)
 }
 
+async function loadGroupChats() {
+  try {
+    const groups = await listMyGroups()
+    for (const g of groups || []) {
+      store.ensureGroupChat(g)
+    }
+  } catch (e) {
+    console.warn('Не удалось загрузить группы:', e)
+  }
+}
+
 /** Подтянуть имя + фамилию собеседников в список чатов */
 async function loadChatNames() {
   try {
@@ -231,7 +243,7 @@ async function handleLoginSuccess(credentials) {
     store.setAuthenticated(true)
 
     await loadMessageHistory()
-    await Promise.all([loadChatNames(), loadMyProfileAvatar(result)])
+    await Promise.all([loadChatNames(), loadMyProfileAvatar(result), loadGroupChats()])
 
     // WS авторизуется cookie access_token
     initChatSession()
@@ -263,7 +275,7 @@ async function handleRegisterSuccess(userData) {
     store.setAuthenticated(true)
 
     await loadMessageHistory()
-    await Promise.all([loadChatNames(), loadMyProfileAvatar(result)])
+    await Promise.all([loadChatNames(), loadMyProfileAvatar(result), loadGroupChats()])
 
     // WS авторизуется cookie access_token
     initChatSession()
@@ -274,10 +286,27 @@ async function handleRegisterSuccess(userData) {
 }
 
 function handleEvent(event) {
+  // Вас добавили в группу — сразу показать в списке, без релогина
+  if (event.groupAdded) {
+    store.ensureGroupChat(event.groupAdded)
+    return
+  }
+
   if (event.message) {
+    const text = event.message.text || ''
+    // страховка, если WS не распарсил prefix
+    if (typeof text === 'string' && text.startsWith('__GROUP_ADDED__')) {
+      try {
+        const group = JSON.parse(text.slice('__GROUP_ADDED__'.length))
+        store.ensureGroupChat(group)
+      } catch (e) {
+        console.warn('groupAdded parse failed', e)
+      }
+      return
+    }
+
     const sid = Number(event.message.senderId)
     const rid = Number(event.message.recipientId)
-    const text = event.message.text || ''
     const isMine = sid === store.myUserId
     const peerId = isMine ? rid : sid
 

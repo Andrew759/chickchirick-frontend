@@ -8,6 +8,7 @@ import {
   isKeyAnnounce,
   resolveE2eeDisplayText
 } from '../services/crypto'
+import { getGroup } from '../services/groups'
 
 /**
  * Приводим createdAt к ISO-строке.
@@ -120,12 +121,19 @@ function sortChatMessages(chat) {
 /** Время последнего сообщения в чате (мс), 0 если сообщений нет. */
 function lastMessageTime(chat) {
   const msgs = chat?.messages
-  if (!msgs?.length) return 0
-  // сообщения отсортированы по возрастанию → последнее = самое новое
-  const last = msgs[msgs.length - 1]
-  if (!last?.createdAt) return 0
-  const t = new Date(last.createdAt).getTime()
-  return Number.isNaN(t) ? 0 : t
+  if (msgs?.length) {
+    const last = msgs[msgs.length - 1]
+    if (last?.createdAt) {
+      const t = new Date(last.createdAt).getTime()
+      if (!Number.isNaN(t)) return t
+    }
+  }
+  // пустая только что созданная группа
+  if (chat?.lastActivityAt) {
+    const t = new Date(chat.lastActivityAt).getTime()
+    return Number.isNaN(t) ? 0 : t
+  }
+  return 0
 }
 
 /**
@@ -276,26 +284,38 @@ export const useChatStore = defineStore('chat', {
         const senderId = Number(message.senderId)
         const recipientId = Number(message.recipientId)
         const isMine = senderId === this.myUserId
-        const chatId = isMine ? recipientId : senderId
+        const groupId = message.groupId || message.group_id || null
+        const chatId = groupId ? `group:${groupId}` : (isMine ? recipientId : senderId)
         if (!chatId) continue
 
         const rawText = message.text ?? message.Text ?? ''
-        if (isKeyAnnounce(rawText)) continue
+        if (!groupId && isKeyAnnounce(rawText)) continue
 
         if (!chatMap.has(chatId)) {
-          const known = this.usersById[chatId]
-          chatMap.set(chatId, {
-            id: chatId,
-            name: displayName(known) || 'Пользователь',
-            messages: []
-          })
+          if (groupId) {
+            chatMap.set(chatId, {
+              id: chatId,
+              groupId,
+              type: 'group',
+              isGroup: true,
+              name: 'Группа',
+              messages: []
+            })
+          } else {
+            const known = this.usersById[chatId]
+            chatMap.set(chatId, {
+              id: chatId,
+              name: displayName(known) || 'Пользователь',
+              messages: []
+            })
+          }
         }
         const chat = chatMap.get(chatId)
         if (message.id != null && chat.messages.some((m) => m.id === message.id)) continue
 
         let extra = normalizeMessageFields(message)
         const encrypted = isEncryptedText(rawText)
-        if (encrypted || (typeof rawText === 'string' && /^e2ee:v\d+:/i.test(rawText.trim()))) {
+        if (!groupId && (encrypted || (typeof rawText === 'string' && /^e2ee:v\d+:/i.test(rawText.trim())))) {
           const peerId = isMine ? recipientId : senderId
           try {
             const plain = await resolveE2eeDisplayText(peerId, rawText)
@@ -318,10 +338,11 @@ export const useChatStore = defineStore('chat', {
           isVideo: extra.isVideo,
           isVideoNote: extra.isVideoNote,
           isVoiceMessage: extra.isVoiceMessage,
-          isEncrypted: encrypted,
+          isEncrypted: !!encrypted && !groupId,
           fromMe: isMine,
           senderId,
           recipientId,
+          groupId: groupId || undefined,
           createdAt: normalizeCreatedAt(message.createdAt)
         })
       }
@@ -358,13 +379,16 @@ export const useChatStore = defineStore('chat', {
       const senderId = Number(msg.senderId)
       const recipientId = Number(msg.recipientId)
       const isMine = senderId === this.myUserId
-      const chatId = isMine ? recipientId : senderId
+      const groupId = msg.groupId || msg.group_id || null
+      const chatId = groupId
+        ? `group:${groupId}`
+        : (isMine ? recipientId : senderId)
 
       if (!chatId) return
 
       const rawText = msg.text ?? msg.Text ?? ''
 
-      if (isKeyAnnounce(rawText)) {
+      if (!groupId && isKeyAnnounce(rawText)) {
         if (!isMine) {
           tryConsumeKeyAnnounce(senderId, rawText)
         }
@@ -374,14 +398,32 @@ export const useChatStore = defineStore('chat', {
       let chat = this.chats.find((c) => c.id === chatId)
 
       if (!chat) {
-        const known = this.usersById[chatId]
-        const name = displayName(known) || 'Пользователь'
-        chat = {
-          id: chatId,
-          name,
-          messages: []
+        if (groupId) {
+          chat = {
+            id: chatId,
+            groupId,
+            type: 'group',
+            isGroup: true,
+            name: 'Группа',
+            messages: []
+          }
+          this.chats.push(chat)
+          // подтянуть title/avatar, чтобы чат сразу выглядел нормально
+          getGroup(groupId)
+            .then((g) => {
+              if (g) this.ensureGroupChat(g)
+            })
+            .catch(() => {})
+        } else {
+          const known = this.usersById[chatId]
+          const name = displayName(known) || 'Пользователь'
+          chat = {
+            id: chatId,
+            name,
+            messages: []
+          }
+          this.chats.push(chat)
         }
-        this.chats.push(chat)
       }
 
       if (msg.id != null && chat.messages.some((m) => m.id === msg.id)) return
@@ -462,7 +504,17 @@ export const useChatStore = defineStore('chat', {
     },
 
     setActiveChat(id) {
-      const next = id == null || id === '' ? null : Number(id)
+      if (id == null || id === '') {
+        this.activeChatId = null
+        return
+      }
+      // group chats use string ids like "group:<uuid>"
+      if (typeof id === 'string' && id.startsWith('group:')) {
+        if (id === this.activeChatId) return
+        this.activeChatId = id
+        return
+      }
+      const next = Number(id)
       if (Number.isNaN(next)) return
       if (next === this.activeChatId) return
       this.activeChatId = next
@@ -488,6 +540,50 @@ export const useChatStore = defineStore('chat', {
       } else {
         typingTimers.delete(id)
       }
+    },
+
+    /**
+     * Зарегистрировать/обновить групповой чат в списке.
+     * @param {{ group_uuid: string, title?: string, avatar_file_uuid?: string|null, member_count?: number }} group
+     */
+    ensureGroupChat(group) {
+      const uuid = group?.group_uuid || group?.groupUuid || group?.groupId
+      if (!uuid) return null
+      const id = `group:${uuid}`
+      let chat = this.chats.find((c) => c.id === id)
+      if (!chat) {
+        chat = {
+          id,
+          groupId: uuid,
+          type: 'group',
+          isGroup: true,
+          name: group.title || 'Группа',
+          avatarFileUuid: group.avatar_file_uuid || group.avatarFileUuid || null,
+          memberCount: group.member_count || group.memberCount || 0,
+          messages: [],
+          // чтобы пустая группа поднималась в списке сразу после создания
+          lastActivityAt: new Date().toISOString()
+        }
+        this.chats.push(chat)
+      } else {
+        if (group.title) chat.name = group.title
+        if (group.avatar_file_uuid || group.avatarFileUuid) {
+          chat.avatarFileUuid = group.avatar_file_uuid || group.avatarFileUuid
+        }
+        if (group.member_count != null || group.memberCount != null) {
+          chat.memberCount = group.member_count ?? group.memberCount
+        }
+        chat.lastActivityAt = new Date().toISOString()
+      }
+      sortChatsByLastMessage(this.chats)
+      return chat
+    },
+
+    openGroupChat(group) {
+      const chat = this.ensureGroupChat(group)
+      if (!chat) return
+      this.activeChatId = chat.id
+      this.currentView = 'chats'
     },
 
     /**

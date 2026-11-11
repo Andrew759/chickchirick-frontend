@@ -59,6 +59,7 @@
 import { computed, ref, watch, nextTick } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { sendMessage, sendTyping, requestDeleteMessage } from '../services/socket'
+import { isGroupChatId, parseGroupUuid, sendGroupMessage } from '../services/groups'
 import { uploadFile, linkFileToMessage, getFileUrl } from '../services/files'
 import { buildFileMessageText } from '../services/fileMarker'
 import {
@@ -194,7 +195,7 @@ function openVideo(msg) {
  */
 function handleTyping(active) {
   const recipientId = chat.value?.id
-  if (!recipientId) return
+  if (!recipientId || isGroupChatId(recipientId)) return
   sendTyping(recipientId, active)
 }
 
@@ -241,7 +242,20 @@ async function handleSend(payload) {
   if (!recipientId) return
   if (!caption && !file && !sticker) return
 
-  await ensureE2eeReady(recipientId)
+  const groupUuid = parseGroupUuid(recipientId)
+  const isGroup = Boolean(groupUuid)
+
+  if (!isGroup) {
+    await ensureE2eeReady(recipientId)
+  }
+
+  async function deliver(text) {
+    if (isGroup) {
+      await sendGroupMessage(groupUuid, { text })
+      return
+    }
+    sendMessage({ recipientId, text })
+  }
 
   // Стикер: файл уже в files-сервисе (image_uuid), upload не нужен
   if (sticker?.image_uuid) {
@@ -253,15 +267,15 @@ async function handleSend(payload) {
       sticker.emoji || '',
       audioUuid
     )
-    const text = await maybeEncrypt(recipientId, plain)
-    sendMessage({ recipientId, text })
+    const text = isGroup ? plain : await maybeEncrypt(recipientId, plain)
+    await deliver(text)
     waitAndLinkFile(fileUuid)
     return
   }
 
   if (!file) {
-    const text = await maybeEncrypt(recipientId, caption)
-    sendMessage({ recipientId, text })
+    const text = isGroup ? caption : await maybeEncrypt(recipientId, caption)
+    await deliver(text)
     return
   }
 
@@ -277,8 +291,8 @@ async function handleSend(payload) {
 
   // 2) текст с маркером → шифруем целиком (caption + file marker)
   const plain = buildFileMessageText(fileUuid, file.name, caption)
-  const text = await maybeEncrypt(recipientId, plain)
-  sendMessage({ recipientId, text })
+  const text = isGroup ? plain : await maybeEncrypt(recipientId, plain)
+  await deliver(text)
 
   // 3) после появления сообщения в store — привязка file_uuid в messages
   waitAndLinkFile(fileUuid)

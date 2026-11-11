@@ -56,6 +56,15 @@
       <button
         type="button"
         class="toolbar-action"
+        title="Новая группа"
+        aria-label="Новая группа"
+        @click="showCreateGroup = true"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+      </button>
+      <button
+        type="button"
+        class="toolbar-action"
         title="Загрузить стикеры"
         aria-label="Загрузить стикеры"
         @click="openStickers"
@@ -95,6 +104,7 @@
       >×</button>
     </div>
 
+    <CreateGroupModal v-if="showCreateGroup" @close="showCreateGroup = false" @created="onGroupCreated" />
     <StickersManager v-if="showStickers" @close="showStickers = false" />
 
     <PhotoViewer
@@ -193,6 +203,7 @@ import PhotoViewer from './PhotoViewer.vue'
 import AvatarEqualizer from './AvatarEqualizer.vue'
 import StickersManager from './StickersManager.vue'
 import ChatTypeIcon from './ChatTypeIcon.vue'
+import CreateGroupModal from './CreateGroupModal.vue'
 
 const store = useChatStore()
 
@@ -218,6 +229,12 @@ const visibleChats = computed(() => chats.value.filter((chat) =>
 ))
 
 const showStickers = ref(false)
+const showCreateGroup = ref(false)
+
+function onGroupCreated(group) {
+  store.openGroupChat(group)
+  chatFilter.value = 'group'
+}
 
 function openStickers() {
   showStickers.value = true
