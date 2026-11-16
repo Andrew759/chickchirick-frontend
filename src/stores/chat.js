@@ -204,6 +204,8 @@ export const useChatStore = defineStore('chat', {
     /** Профиль текущего пользователя (user-service) */
     myProfile: null,
     viewedProfile: null,
+    /** Открытая панель свойств группы */
+    viewedGroup: null,
     /** messages-local user id -> whether the peer is currently typing */
     typingByChatId: {}
   }),
@@ -230,6 +232,7 @@ export const useChatStore = defineStore('chat', {
       this.usersById = {}
       this.myProfile = null
       this.viewedProfile = null
+      this.viewedGroup = null
       this.typingByChatId = {}
       typingTimers.forEach((timer) => clearTimeout(timer))
       typingTimers.clear()
@@ -241,6 +244,7 @@ export const useChatStore = defineStore('chat', {
 
     async openMyProfile() {
       this.viewedProfile = null
+      this.viewedGroup = null
       this.currentView = 'chats'
       await nextTick()
       this.myProfileOpen = true
@@ -253,6 +257,7 @@ export const useChatStore = defineStore('chat', {
     async openUserProfile(user) {
       if (!user || !user.id) return
       this.myProfileOpen = false
+      this.viewedGroup = null
       this.currentView = 'chats'
       await nextTick()
       this.viewedProfile = { ...user }
@@ -260,6 +265,32 @@ export const useChatStore = defineStore('chat', {
 
     closeUserProfile() {
       this.viewedProfile = null
+    },
+
+    async openGroupProfile(group) {
+      let uuid = group?.group_uuid || group?.groupUuid || group?.groupId || null
+      if (uuid && String(uuid).startsWith('group:')) {
+        uuid = String(uuid).slice(6)
+      }
+      if (!uuid) {
+        console.warn('openGroupProfile: missing uuid', group)
+        return
+      }
+      this.myProfileOpen = false
+      this.viewedProfile = null
+      this.currentView = 'chats'
+      await nextTick()
+      this.viewedGroup = {
+        group_uuid: String(uuid),
+        title: group?.title || group?.name || 'Группа',
+        avatar_file_uuid: group?.avatar_file_uuid || group?.avatarFileUuid || null,
+        member_count: group?.member_count || group?.memberCount || 0,
+        created_by: group?.created_by || group?.createdBy || null
+      }
+    },
+
+    closeGroupProfile() {
+      this.viewedGroup = null
     },
 
     async setHistory(history) {

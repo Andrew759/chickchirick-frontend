@@ -15,7 +15,7 @@
       <button
         type="button"
         class="chat-profile-trigger"
-        @click="isGroupChat ? null : emit('open-profile', { id: chat.id, ...chatUser })"
+        @click="onHeaderProfileClick"
       >
         <span class="chat-profile-avatar">
           <img
@@ -121,6 +121,29 @@ watch(
   { immediate: true }
 )
 
+function onHeaderProfileClick() {
+  const c = chat.value
+  if (!c) return
+
+  // Группа: открываем панель свойств напрямую через store (надёжнее, чем только emit)
+  if (isGroupChat.value || isGroupChatId(c.id) || c.isGroup || c.type === 'group') {
+    const uuid = parseGroupUuid(c.id) || c.groupId || c.group_uuid || c.groupUuid
+    if (!uuid) {
+      console.warn('openGroupProfile: no group uuid on chat', c)
+      return
+    }
+    store.openGroupProfile({
+      group_uuid: uuid,
+      title: c.name || c.title,
+      avatar_file_uuid: c.avatarFileUuid || c.avatar_file_uuid,
+      member_count: c.memberCount || c.member_count
+    })
+    return
+  }
+
+  emit('open-profile', { id: c.id, ...chatUser.value })
+}
+
 function onOpenSender(senderId) {
   const id = Number(senderId)
   if (!id) return
@@ -141,7 +164,7 @@ const voiceQueue = computed(() =>
 )
 const chatUser = computed(() => store.usersById[chat.value?.id] || {})
 const isPeerTyping = computed(() => Boolean(chat.value?.id && store.typingByChatId[chat.value.id]))
-const emit = defineEmits(['open-profile', 'back'])
+const emit = defineEmits(['open-profile', 'open-group-profile', 'back'])
 const messagesEl = ref(null)
 
 const viewerOpen = ref(false)

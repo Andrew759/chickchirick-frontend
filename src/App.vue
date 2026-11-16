@@ -4,7 +4,7 @@
     class="app-shell"
     :class="{
       'is-mobile': isMobile,
-      'mobile-profile-open': store.myProfileOpen || !!store.viewedProfile
+      'mobile-profile-open': store.myProfileOpen || !!store.viewedProfile || !!store.viewedGroup
     }"
   >
     <div class="layout">
@@ -17,6 +17,7 @@
           v-if="store.activeChat"
           :key="'cw-' + store.activeChatId"
           @open-profile="store.openUserProfile"
+          @open-group-profile="(g) => store.openGroupProfile(g)"
           @back="onBackToList"
         />
         <div v-else class="empty">Выберите чат</div>
@@ -33,6 +34,16 @@
         class="panel-profile profile-overlay"
         :user="store.viewedProfile"
         @close="store.closeUserProfile"
+      />
+    </Teleport>
+    <Teleport to="body">
+      <GroupProfile
+        v-if="store.viewedGroup"
+        class="panel-profile profile-overlay"
+        :group="store.viewedGroup"
+        @close="store.closeGroupProfile"
+        @open-user="store.openUserProfile"
+        @updated="onGroupUpdated"
       />
     </Teleport>
   </div>
@@ -76,6 +87,7 @@ import {
 import ChatList from './components/ChatList.vue'
 import UserProfile from './components/UserProfile.vue'
 import PublicUserProfile from './components/PublicUserProfile.vue'
+import GroupProfile from './components/GroupProfile.vue'
 import ChatWindow from './components/ChatWindow.vue'
 import MiniPlayer from './components/MiniPlayer.vue'
 import RegisterForm from './components/RegisterForm.vue'
@@ -184,6 +196,10 @@ async function loadMessageHistory() {
 
   const history = await response.json()
   await store.setHistory(history)
+}
+
+function onGroupUpdated(group) {
+  if (group) store.ensureGroupChat(group)
 }
 
 async function loadGroupChats() {
@@ -391,8 +407,14 @@ function handleEvent(event) {
   top: 0;
   right: 0;
   bottom: 0;
-  z-index: 50;
-  box-shadow: -8px 0 32px rgba(15, 23, 42, .12);
+  z-index: 200;
+  width: 320px;
+  max-width: 100vw;
+  height: 100%;
+  height: 100dvh;
+  box-shadow: -8px 0 32px rgba(15, 23, 42, .18);
+  background: #fff;
+  overflow: auto;
 }
 .auth-wrapper {
   background: #f0f2f5;

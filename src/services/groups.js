@@ -113,3 +113,18 @@ export function parseGroupUuid(chatId) {
 export function isGroupChatId(chatId) {
   return Boolean(parseGroupUuid(chatId))
 }
+
+/**
+ * @param {string} groupUuid
+ * @returns {Promise<Array<{ id:number, group_id:number, user_id:number, role:string }>>}
+ */
+export async function listGroupMembers(groupUuid) {
+  const res = await fetch(`${API}/group-chats/${encodeURIComponent(groupUuid)}/members`, {
+    credentials: 'include'
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || `list members failed: ${res.status}`)
+  }
+  return res.json()
+}
