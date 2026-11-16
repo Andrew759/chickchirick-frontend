@@ -140,7 +140,8 @@ function onHeaderProfileClick() {
       group_uuid: uuid,
       title: c.name || c.title,
       avatar_file_uuid: c.avatarFileUuid || c.avatar_file_uuid,
-      member_count: c.memberCount || c.member_count
+      member_count: c.memberCount || c.member_count,
+      created_by: c.createdBy || c.created_by
     })
     return
   }

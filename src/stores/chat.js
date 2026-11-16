@@ -683,6 +683,7 @@ export const useChatStore = defineStore('chat', {
           name: group.title || 'Группа',
           avatarFileUuid: group.avatar_file_uuid || group.avatarFileUuid || null,
           memberCount: group.member_count || group.memberCount || 0,
+          createdBy: group.created_by || group.createdBy || null,
           messages: [],
           // чтобы пустая группа поднималась в списке сразу после создания
           lastActivityAt: new Date().toISOString()
@@ -695,6 +696,9 @@ export const useChatStore = defineStore('chat', {
         }
         if (group.member_count != null || group.memberCount != null) {
           chat.memberCount = group.member_count ?? group.memberCount
+        }
+        if (group.created_by != null || group.createdBy != null) {
+          chat.createdBy = group.created_by ?? group.createdBy
         }
         chat.lastActivityAt = new Date().toISOString()
       }

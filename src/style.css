@@ -893,3 +893,54 @@ html:not([data-theme="dark"]) .chat-window .bubble.voice .time,
 html:not([data-theme="dark"]) .chat-window .bubble.video-note .time {
   text-shadow: none !important;
 }
+
+
+/* group-profile dark */
+html[data-theme="dark"] .group-profile.public-profile,
+html[data-theme="dark"] aside.group-profile {
+  background: #161c24 !important;
+  color: #eef3f8 !important;
+  border-color: #252d38 !important;
+}
+html[data-theme="dark"] .group-profile .profile-header {
+  background: #1a2430 !important;
+  border-color: #252d38 !important;
+}
+html[data-theme="dark"] .group-profile .section.card {
+  background: #1a2430 !important;
+  border-color: #2a333e !important;
+}
+html[data-theme="dark"] .group-profile .member-name,
+html[data-theme="dark"] .group-profile .identity .name,
+html[data-theme="dark"] .group-profile .profile-header h3 {
+  color: #eef3f8 !important;
+}
+html[data-theme="dark"] .group-profile .member-role,
+html[data-theme="dark"] .group-profile .section-title,
+html[data-theme="dark"] .group-profile .identity .meta {
+  color: #9eb0c0 !important;
+}
+html[data-theme="dark"] .group-profile .member-role.owner { color: #e6b84d !important; }
+html[data-theme="dark"] .group-profile .member-role.admin { color: #6ec3f0 !important; }
+html[data-theme="dark"] .group-profile .btn-add-members {
+  background: #17364a !important;
+  border-color: #2a5a75 !important;
+  color: #75ccf8 !important;
+}
+html[data-theme="dark"] .group-profile .add-panel {
+  background: #161c24 !important;
+  border-color: #2a333e !important;
+}
+html[data-theme="dark"] .group-profile .edit-input {
+  background: #202f3d !important;
+  border-color: #2a333e !important;
+  color: #eef3f8 !important;
+}
+html[data-theme="dark"] .group-profile .btn-file {
+  background: #17364a !important;
+  color: #75ccf8 !important;
+}
+html[data-theme="dark"] .group-profile .section-count {
+  background: #243442 !important;
+  color: #b8c9d6 !important;
+}

@@ -6,7 +6,8 @@
     </div>
 
     <div class="profile-content">
-      <div class="avatar-wrap">
+      <!-- Hero -->
+      <div class="hero">
         <button
           type="button"
           class="profile-avatar"
@@ -16,24 +17,31 @@
           <img v-if="avatarUrl" :src="avatarUrl" alt="" class="avatar-img" />
           <span v-else>{{ titleLetter }}</span>
         </button>
-      </div>
-
-      <div class="identity">
-        <div class="name">{{ title }}</div>
-        <div class="login">{{ memberCountLabel }}</div>
+        <div class="identity">
+          <div class="name">{{ title }}</div>
+          <div class="meta">{{ memberCountLabel }}</div>
+        </div>
       </div>
 
       <p v-if="loading" class="status-line">Обновление…</p>
       <p v-if="error" class="status-line error">{{ error }}</p>
       <p v-if="saveError" class="status-line error">{{ saveError }}</p>
+      <p v-if="addError" class="status-line error">{{ addError }}</p>
+      <p v-if="addOk" class="status-line ok">{{ addOk }}</p>
 
-      <!-- Редактирование (owner/admin) -->
-      <div v-if="canEdit" class="section">
+      <!-- Управление (owner/admin) -->
+      <div v-if="canEdit" class="section card">
         <div class="section-header">
-          <span class="section-title">Название</span>
+          <span class="section-title">Настройки</span>
         </div>
         <div class="edit-row">
-          <input v-model="editTitle" type="text" maxlength="80" class="edit-input" />
+          <input
+            v-model="editTitle"
+            type="text"
+            maxlength="80"
+            class="edit-input"
+            placeholder="Название группы"
+          />
           <button
             type="button"
             class="btn-save"
@@ -43,12 +51,6 @@
             {{ saving ? '…' : 'OK' }}
           </button>
         </div>
-      </div>
-
-      <div v-if="canEdit" class="section">
-        <div class="section-header">
-          <span class="section-title">Фото группы</span>
-        </div>
         <label class="btn-file">
           <input type="file" accept="image/*" hidden :disabled="saving" @change="onAvatarFile" />
           {{ saving ? 'Загрузка…' : 'Сменить фото' }}
@@ -56,10 +58,78 @@
       </div>
 
       <!-- Участники -->
-      <div class="section">
+      <div class="section card">
         <div class="section-header">
           <span class="section-title">Участники</span>
           <span class="section-count">{{ membersView.length || memberCountHint }}</span>
+        </div>
+
+        <button
+          v-if="canEdit"
+          type="button"
+          class="btn-add-members"
+          :class="{ open: showAdd }"
+          @click="toggleAdd"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path
+              d="M12 5v14M5 12h14"
+              stroke="currentColor"
+              stroke-width="2"
+              fill="none"
+              stroke-linecap="round"
+            />
+          </svg>
+          {{ showAdd ? 'Скрыть поиск' : 'Добавить участников' }}
+        </button>
+
+        <!-- Панель добавления -->
+        <div v-if="showAdd && canEdit" class="add-panel">
+          <div class="search-wrap">
+            <input
+              v-model="query"
+              type="text"
+              class="edit-input"
+              placeholder="Логин или имя…"
+              @input="onSearchInput"
+            />
+          </div>
+          <div v-if="searchLoading" class="status-line small">Поиск…</div>
+          <div v-else-if="searchError" class="status-line error small">{{ searchError }}</div>
+          <div v-else-if="results.length" class="search-results">
+            <button
+              v-for="u in results"
+              :key="u.id"
+              type="button"
+              class="result-row"
+              :class="{ selected: isPicked(u), disabled: isAlreadyMember(u) }"
+              :disabled="isAlreadyMember(u) || adding"
+              @click="togglePick(u)"
+            >
+              <span class="member-avatar letter" :style="{ background: colorFor(u.id) }">
+                {{ letter(u) }}
+              </span>
+              <span class="member-meta">
+                <span class="member-name">{{ fullName(u) }}</span>
+                <span class="member-role">
+                  {{ isAlreadyMember(u) ? 'уже в группе' : (u.login ? '@' + u.login : '') }}
+                </span>
+              </span>
+              <span v-if="isPicked(u)" class="check">✓</span>
+            </button>
+          </div>
+
+          <div v-if="picked.length" class="picked-bar">
+            <span class="picked-label">Выбрано: {{ picked.length }}</span>
+            <button
+              type="button"
+              class="btn-save wide"
+              :disabled="adding"
+              @click="submitAdd"
+            >
+              {{ adding ? 'Добавляем…' : 'Добавить' }}
+            </button>
+          </div>
         </div>
 
         <div v-if="membersLoading" class="status-line">Загрузка участников…</div>
@@ -78,7 +148,7 @@
             </span>
             <span class="member-meta">
               <span class="member-name">{{ m.displayName }}</span>
-              <span class="member-role">{{ roleLabel(m.role) }}</span>
+              <span class="member-role" :class="m.role">{{ roleLabel(m.role) }}</span>
             </span>
           </button>
         </div>
@@ -97,8 +167,8 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { getFileUrl, uploadFile } from '../services/files'
-import { getGroup, listGroupMembers, updateGroup } from '../services/groups'
-import { resolveChatUsers } from '../services/users'
+import { getGroup, listGroupMembers, updateGroup, addGroupMembers } from '../services/groups'
+import { resolveChatUsers, searchUsers, resolveMessagesIdByUuid } from '../services/users'
 import { useChatStore } from '../stores/chat'
 import PhotoViewer from './PhotoViewer.vue'
 
@@ -122,6 +192,17 @@ const saveError = ref('')
 const myRole = ref('')
 const viewerOpen = ref(false)
 const viewerItems = ref([])
+
+const showAdd = ref(false)
+const query = ref('')
+const results = ref([])
+const picked = ref([])
+const searchLoading = ref(false)
+const searchError = ref('')
+const adding = ref(false)
+const addError = ref('')
+const addOk = ref('')
+let searchDebounce = null
 
 const COLORS = [
   '#e17076', '#faa774', '#a695e7', '#7bc862',
@@ -178,7 +259,27 @@ const memberCountLabel = computed(() => {
   return `${n} участников`
 })
 
-const canEdit = computed(() => myRole.value === 'owner' || myRole.value === 'admin')
+const canEdit = computed(() => {
+  const role = String(myRole.value || '').toLowerCase().trim()
+  if (role === 'owner' || role === 'admin') return true
+  const createdBy = Number(
+    groupData.value?.created_by ??
+    groupData.value?.createdBy ??
+    props.group?.created_by ??
+    props.group?.createdBy ??
+    0
+  )
+  return Boolean(createdBy && createdBy === Number(store.myUserId))
+})
+
+const memberIdSet = computed(() => {
+  const s = new Set()
+  for (const m of members.value || []) {
+    const id = Number(m.user_id ?? m.userId)
+    if (id) s.add(id)
+  }
+  return s
+})
 
 const membersView = computed(() => {
   return (members.value || [])
@@ -214,6 +315,16 @@ function roleLabel(role) {
   return 'участник'
 }
 
+function fullName(user) {
+  const n = `${user.name || ''} ${user.surname || ''}`.trim()
+  return n || user.login || `User ${user.id}`
+}
+
+function letter(user) {
+  const n = (user.name || user.login || '?').trim()
+  return (n[0] || '?').toUpperCase()
+}
+
 function openAvatar() {
   if (!avatarUrl.value) return
   viewerItems.value = [{ src: avatarUrl.value, alt: title.value, fileName: 'group-avatar.jpg' }]
@@ -226,6 +337,112 @@ function openMember(m) {
   emit('open-user', { id: m.user_id, ...meta })
 }
 
+function toggleAdd() {
+  showAdd.value = !showAdd.value
+  addError.value = ''
+  addOk.value = ''
+  if (!showAdd.value) {
+    query.value = ''
+    results.value = []
+    picked.value = []
+  }
+}
+
+function isAlreadyMember(user) {
+  // user.id from search is user-service id; membership is messages-local id
+  // we match after resolve; for now filter by login/name against current members meta
+  const login = (user.login || '').toLowerCase()
+  if (!login) return false
+  for (const m of membersView.value) {
+    const meta = membersMeta.value[m.user_id] || store.usersById[m.user_id] || {}
+    if ((meta.login || '').toLowerCase() === login) return true
+  }
+  return false
+}
+
+function isPicked(user) {
+  return picked.value.some((u) => u.id === user.id)
+}
+
+function togglePick(user) {
+  if (isAlreadyMember(user)) return
+  if (isPicked(user)) {
+    picked.value = picked.value.filter((u) => u.id !== user.id)
+  } else {
+    picked.value = [...picked.value, user]
+  }
+}
+
+function onSearchInput() {
+  clearTimeout(searchDebounce)
+  searchError.value = ''
+  const q = query.value.trim()
+  if (q.length < 2) {
+    results.value = []
+    searchLoading.value = false
+    return
+  }
+  searchLoading.value = true
+  searchDebounce = setTimeout(async () => {
+    try {
+      results.value = await searchUsers(q)
+    } catch (e) {
+      searchError.value = e.message || 'Ошибка поиска'
+      results.value = []
+    } finally {
+      searchLoading.value = false
+    }
+  }, 280)
+}
+
+async function submitAdd() {
+  if (!picked.value.length || adding.value) return
+  const uuid = groupUuid.value
+  if (!uuid) return
+  adding.value = true
+  addError.value = ''
+  addOk.value = ''
+  try {
+    const memberIds = []
+    for (const u of picked.value) {
+      try {
+        const mid = await resolveMessagesIdByUuid(u.userUuid || u.user_uuid)
+        if (mid) memberIds.push(Number(mid))
+      } catch (e) {
+        console.warn('resolve member', u, e)
+      }
+    }
+    if (!memberIds.length) {
+      addError.value = 'Не удалось сопоставить пользователей с мессенджером'
+      return
+    }
+    const res = await addGroupMembers(uuid, memberIds)
+    const n = res?.added ?? memberIds.length
+    addOk.value = n ? `Добавлено: ${n}` : 'Никого не добавлено (уже в группе?)'
+    picked.value = []
+    query.value = ''
+    results.value = []
+    await loadMembers(uuid)
+    // member_count in chat list
+    store.ensureGroupChat({
+      group_uuid: uuid,
+      title: title.value,
+      member_count: members.value.length,
+      avatar_file_uuid: avatarUuid.value
+    })
+    emit('updated', {
+      group_uuid: uuid,
+      title: title.value,
+      member_count: members.value.length,
+      avatar_file_uuid: avatarUuid.value
+    })
+  } catch (e) {
+    addError.value = e.message || 'Не удалось добавить'
+  } finally {
+    adding.value = false
+  }
+}
+
 async function loadAll() {
   const uuid = groupUuid.value
   if (!uuid) {
@@ -233,7 +450,6 @@ async function loadAll() {
     return
   }
 
-  // сразу показываем то, что уже есть в props
   groupData.value = {
     group_uuid: uuid,
     title: props.group?.title || props.group?.name || 'Группа',
@@ -251,7 +467,6 @@ async function loadAll() {
     store.ensureGroupChat(g)
   } catch (e) {
     console.warn('getGroup failed', e)
-    // не блокируем UI — оставляем props
   } finally {
     loading.value = false
   }
@@ -265,8 +480,18 @@ async function loadMembers(uuid) {
     const list = await listGroupMembers(uuid)
     members.value = Array.isArray(list) ? list : []
     const myId = Number(store.myUserId)
-    const me = members.value.find((m) => Number(m.user_id ?? m.userId) === myId)
-    myRole.value = me?.role || me?.Role || ''
+    const me = members.value.find((m) => {
+      const uid = Number(m.user_id ?? m.userId ?? m.UserId ?? 0)
+      return uid && uid === myId
+    })
+    myRole.value = String(me?.role || me?.Role || '').toLowerCase()
+    // fallback: creator of the group
+    if (!myRole.value) {
+      const createdBy = Number(
+        groupData.value?.created_by ?? groupData.value?.createdBy ?? props.group?.created_by ?? 0
+      )
+      if (createdBy && createdBy === myId) myRole.value = 'owner'
+    }
 
     const ids = members.value
       .map((m) => Number(m.user_id ?? m.userId))
@@ -330,6 +555,7 @@ async function onAvatarFile(e) {
 watch(
   () => props.group?.group_uuid || props.group?.groupUuid || props.group?.groupId,
   () => {
+    showAdd.value = false
     loadAll()
   },
   { immediate: true }
@@ -338,11 +564,29 @@ watch(
 
 <style scoped>
 .group-profile.public-profile {
+  --gp-bg: #ffffff;
+  --gp-card-bg: #f5f9fc;
+  --gp-card-border: #e4edf2;
+  --gp-text: #163247;
+  --gp-muted: #6b8494;
+  --gp-header-bg: #f7fbfd;
+  --gp-header-border: #e8eef2;
+  --gp-input-bg: #ffffff;
+  --gp-input-border: #d7e3ec;
+  --gp-accent-bg: #e8f6fd;
+  --gp-accent-text: #0b6ea8;
+  --gp-add-bg: #eef8fd;
+  --gp-add-border: #9ec9e0;
+  --gp-hover: rgba(42, 171, 238, 0.08);
+  --gp-owner: #c98512;
+  --gp-admin: #1a7ab8;
+
   width: 320px;
   max-width: 100vw;
   flex: 0 0 320px;
-  background: #fff;
-  border-left: 1px solid #e4edf2;
+  background: var(--gp-bg);
+  border-left: 1px solid var(--gp-card-border);
+  color: var(--gp-text);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -369,8 +613,8 @@ watch(
   align-items: center;
   gap: 14px;
   padding: 12px 15px;
-  border-bottom: 1px solid #eee;
-  background: #f7fbfd;
+  border-bottom: 1px solid var(--gp-header-border);
+  background: var(--gp-header-bg);
   position: sticky;
   top: 0;
   z-index: 2;
@@ -380,7 +624,8 @@ watch(
 .profile-header h3 {
   margin: 0;
   font-size: 17px;
-  color: #163247;
+  font-weight: 650;
+  color: var(--gp-text);
 }
 
 .btn-back {
@@ -394,15 +639,20 @@ watch(
 }
 
 .profile-content {
-  padding: 24px 18px 28px;
+  padding: 20px 16px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex: 1;
+  gap: 14px;
+}
+
+.hero {
   display: flex;
   flex-direction: column;
   align-items: center;
-  flex: 1;
-}
-
-.avatar-wrap {
-  margin-bottom: 12px;
+  text-align: center;
+  padding: 8px 0 4px;
 }
 
 .profile-avatar {
@@ -419,6 +669,7 @@ watch(
   font-size: 40px;
   font-weight: 700;
   overflow: hidden;
+  box-shadow: 0 6px 20px rgba(42, 171, 238, 0.25);
 }
 
 .profile-avatar.clickable {
@@ -433,20 +684,21 @@ watch(
 }
 
 .identity {
-  text-align: center;
-  margin-bottom: 16px;
+  margin-top: 12px;
 }
 
 .identity .name {
   font-size: 20px;
   font-weight: 700;
-  color: #163247;
+  color: var(--gp-text);
+  line-height: 1.25;
+  word-break: break-word;
 }
 
-.identity .login {
+.identity .meta {
   margin-top: 4px;
   font-size: 14px;
-  color: #7b919d;
+  color: var(--gp-muted);
 }
 
 .status-line {
@@ -454,16 +706,30 @@ watch(
   text-align: center;
   font-size: 13px;
   color: #718895;
-  margin: 0 0 12px;
+  margin: 0;
+}
+
+.status-line.small {
+  font-size: 12px;
+  text-align: left;
+  padding: 4px 2px;
 }
 
 .status-line.error {
   color: #d92d54;
 }
 
-.section {
+.status-line.ok {
+  color: #1a9d5c;
+}
+
+.section.card {
   width: 100%;
-  margin-bottom: 20px;
+  background: var(--gp-card-bg, #f5f9fc);
+  border: 1px solid var(--gp-card-border, #e4edf2);
+  border-radius: 14px;
+  padding: 12px;
+  box-sizing: border-box;
 }
 
 .section-header {
@@ -474,15 +740,18 @@ watch(
 }
 
 .section-title {
-  font-size: 14px;
-  font-weight: 650;
-  color: #334e5e;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--gp-muted);
 }
 
 .section-count {
   font-size: 12px;
-  color: #6e8794;
-  background: #edf3f6;
+  font-weight: 600;
+  color: var(--gp-muted);
+  background: var(--gp-accent-bg);
   border-radius: 10px;
   padding: 2px 8px;
 }
@@ -490,18 +759,26 @@ watch(
 .edit-row {
   display: flex;
   gap: 8px;
+  margin-bottom: 10px;
 }
 
 .edit-input {
   flex: 1;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--gp-input-border);
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 14px;
   outline: none;
-  background: #f8fafc;
-  color: #0f172a;
+  background: var(--gp-input-bg);
+  color: var(--gp-text);
   min-width: 0;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.edit-input:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
 }
 
 .btn-save {
@@ -514,6 +791,12 @@ watch(
   font-size: 13px;
   cursor: pointer;
   flex-shrink: 0;
+  height: 40px;
+}
+
+.btn-save.wide {
+  width: 100%;
+  margin-top: 8px;
 }
 
 .btn-save:disabled {
@@ -527,8 +810,8 @@ watch(
   justify-content: center;
   border-radius: 10px;
   padding: 10px 14px;
-  background: #e8f6fd;
-  color: #0b6ea8;
+  background: var(--gp-accent-bg);
+  color: var(--gp-accent-text);
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
@@ -536,10 +819,100 @@ watch(
   box-sizing: border-box;
 }
 
-.members-list {
+.btn-file:hover {
+  background: #d7f0fc;
+}
+
+.btn-add-members {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  border: 1px dashed var(--gp-add-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--gp-add-bg);
+  color: var(--gp-accent-text);
+  font-weight: 650;
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.btn-add-members:hover,
+.btn-add-members.open {
+  background: #e0f2fb;
+  border-style: solid;
+}
+
+.add-panel {
+  margin-bottom: 12px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--gp-bg);
+  border: 1px solid var(--gp-card-border);
+}
+
+.search-wrap {
+  margin-bottom: 8px;
+}
+
+.search-results {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.result-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  padding: 8px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.result-row:hover:not(.disabled) {
+  background: #f0f7fc;
+}
+
+.result-row.selected {
+  background: #e5f4fc;
+}
+
+.result-row.disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.result-row .check {
+  margin-left: auto;
+  color: #0b6ea8;
+  font-weight: 700;
+}
+
+.picked-bar {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #eef2f6;
+}
+
+.picked-label {
+  font-size: 12px;
+  color: #6b8494;
+}
+
+.members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .member-row {
@@ -556,7 +929,7 @@ watch(
 }
 
 .member-row:hover {
-  background: #f2f9fd;
+  background: var(--gp-hover);
 }
 
 .member-avatar {
@@ -567,9 +940,13 @@ watch(
   display: grid;
   place-items: center;
   color: #fff;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 15px;
   flex-shrink: 0;
+}
+
+.member-avatar.letter {
+  font-size: 15px;
 }
 
 .member-avatar img {
@@ -586,9 +963,9 @@ watch(
 }
 
 .member-name {
-  font-weight: 600;
+  font-weight: 650;
   font-size: 14px;
-  color: #163247;
+  color: var(--gp-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -596,9 +973,20 @@ watch(
 
 .member-role {
   font-size: 12px;
-  color: #7b919d;
+  color: var(--gp-muted);
 }
 
+.member-role.owner {
+  color: var(--gp-owner);
+  font-weight: 600;
+}
+
+.member-role.admin {
+  color: var(--gp-admin);
+  font-weight: 600;
+}
+
+/* Dark */
 :global(html[data-theme="dark"]) .group-profile.public-profile {
   background: #161c24 !important;
   border-color: #252d38 !important;
@@ -612,20 +1000,34 @@ watch(
 
 :global(html[data-theme="dark"]) .profile-header h3,
 :global(html[data-theme="dark"]) .identity .name,
-:global(html[data-theme="dark"]) .member-name,
-:global(html[data-theme="dark"]) .section-title {
-  color: #e6edf3 !important;
+:global(html[data-theme="dark"]) .member-name {
+  color: #eef3f8 !important;
 }
 
-:global(html[data-theme="dark"]) .identity .login,
+:global(html[data-theme="dark"]) .identity .meta,
 :global(html[data-theme="dark"]) .member-role,
-:global(html[data-theme="dark"]) .section-count,
-:global(html[data-theme="dark"]) .status-line {
-  color: #91a4b4 !important;
+:global(html[data-theme="dark"]) .section-title,
+:global(html[data-theme="dark"]) .status-line,
+:global(html[data-theme="dark"]) .picked-label {
+  color: #9eb0c0 !important;
+}
+
+:global(html[data-theme="dark"]) .member-role.owner {
+  color: #e6b84d !important;
+}
+
+:global(html[data-theme="dark"]) .member-role.admin {
+  color: #6ec3f0 !important;
 }
 
 :global(html[data-theme="dark"]) .section-count {
-  background: #20313f !important;
+  background: #243442 !important;
+  color: #b8c9d6 !important;
+}
+
+:global(html[data-theme="dark"]) .section.card {
+  background: #1a2430 !important;
+  border-color: #2a333e !important;
 }
 
 :global(html[data-theme="dark"]) .edit-input {
@@ -634,16 +1036,33 @@ watch(
   color: #e6edf3 !important;
 }
 
-:global(html[data-theme="dark"]) .member-row:hover {
-  background: #1b2b38 !important;
-}
-
 :global(html[data-theme="dark"]) .btn-file {
   background: #17364a !important;
   color: #75ccf8 !important;
 }
 
+:global(html[data-theme="dark"]) .btn-add-members {
+  background: #17364a !important;
+  border-color: #2a5a75 !important;
+  color: #75ccf8 !important;
+}
+
+:global(html[data-theme="dark"]) .add-panel {
+  background: #161c24 !important;
+  border-color: #2a333e !important;
+}
+
+:global(html[data-theme="dark"]) .member-row:hover,
+:global(html[data-theme="dark"]) .result-row:hover:not(.disabled),
+:global(html[data-theme="dark"]) .result-row.selected {
+  background: #1b2b38 !important;
+}
+
 :global(html[data-theme="dark"]) .btn-back {
   color: #65c5f5 !important;
+}
+
+:global(html[data-theme="dark"]) .picked-bar {
+  border-color: #2a333e !important;
 }
 </style>
