@@ -56,15 +56,6 @@
       <button
         type="button"
         class="toolbar-action"
-        title="Новая группа"
-        aria-label="Новая группа"
-        @click="showCreateGroup = true"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
-      </button>
-      <button
-        type="button"
-        class="toolbar-action"
         title="Загрузить стикеры"
         aria-label="Загрузить стикеры"
         @click="openStickers"
@@ -72,6 +63,20 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8a9.2 9.2 0 1 0 9.2 9.2V9.5A6.7 6.7 0 0 0 14.5 2.8Z"/><path d="M14.5 2.8v6.7h6.7M8.5 10h.01M15.5 10h.01M8.5 15c1.8 2 5.2 2 7 0"/></svg>
       </button>
     </nav>
+
+    <!-- Создание группы — только во вкладке «Группы» -->
+    <div v-if="chatFilter === 'group'" class="group-actions">
+      <button
+        type="button"
+        class="btn-create-group"
+        @click="showCreateGroup = true"
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </svg>
+        <span>Создать группу</span>
+      </button>
+    </div>
 
 
     <!-- Поиск всегда сверху -->
@@ -838,6 +843,42 @@ function openChatAvatar(chat) {
     height: 52px;
   }
 }
+
+.group-actions {
+  padding: 8px 12px 4px;
+  flex-shrink: 0;
+}
+
+.btn-create-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #38bdf8, #2aabee);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(42, 171, 238, 0.25);
+}
+
+.btn-create-group:hover {
+  filter: brightness(1.05);
+}
+
+.btn-create-group:active {
+  transform: scale(0.98);
+}
+
+:global(html[data-theme="dark"]) .btn-create-group {
+  background: linear-gradient(135deg, #2b8ec4, #1f6f9c);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
 </style>
 
 <style>

@@ -73,7 +73,10 @@ export function connectSocket() {
 }
 
 export function subscribe(cb) {
-  listeners.push(cb)
+  // не дублировать один и тот же обработчик (initChatSession / HMR)
+  if (!listeners.includes(cb)) {
+    listeners.push(cb)
+  }
   return () => {
     listeners = listeners.filter((listener) => listener !== cb)
   }

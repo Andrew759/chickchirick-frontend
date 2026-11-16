@@ -70,7 +70,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 const _savedTheme = localStorage.getItem('messenger-theme') === 'dark' ? 'dark' : 'light'
 document.documentElement.dataset.theme = _savedTheme
 import { connectSocket, subscribe } from './services/socket'
-import { listMyGroups } from './services/groups'
+import { listMyGroups, listGroupMembers, sendGroupMessage } from './services/groups'
 import {
   resolveChatUsers,
   fetchUserByUuid,
@@ -81,8 +81,10 @@ import {
   ensureIdentity,
   publishMyPublicKey,
   isKeyAnnounce,
-  tryConsumeKeyAnnounce
-} from './services/crypto' 
+  tryConsumeKeyAnnounce,
+  hasGroupKey,
+  redistributeGroupKey
+} from './services/crypto'
 
 import ChatList from './components/ChatList.vue'
 import UserProfile from './components/UserProfile.vue'
@@ -101,6 +103,7 @@ const USER_API_PREFIX = '/api/user'
 const MESSAGES_API_PREFIX = '/api/messages'
 
 const store = useChatStore()
+let unsubscribeWs = null
 
 const isMobile = ref(false)
 function syncMobile() {
@@ -124,6 +127,10 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', syncMobile)
+  if (typeof unsubscribeWs === 'function') {
+    unsubscribeWs()
+    unsubscribeWs = null
+  }
 })
 
 async function checkAuth() {
@@ -202,6 +209,29 @@ function onGroupUpdated(group) {
   if (group) store.ensureGroupChat(group)
 }
 
+
+async function handleGroupMembersChanged(ev) {
+  const uuid = ev?.group_uuid || ev?.groupUuid
+  if (!uuid) return
+  store.ensureGroupChat({
+    group_uuid: uuid,
+    title: ev.title,
+    member_count: ev.member_count
+  })
+  // Только актор изменения (кто добавил/удалил) перераздаёт — без шторма от всех с ключом
+  if (Number(ev.actor_user_id) !== Number(store.myUserId)) return
+  if (!hasGroupKey(uuid)) return
+  const rotate = Array.isArray(ev.removed_user_ids) && ev.removed_user_ids.length > 0
+  try {
+    const members = await listGroupMembers(uuid)
+    const ids = (members || []).map((m) => Number(m.user_id || m.userId)).filter(Boolean)
+    const wire = await redistributeGroupKey(uuid, ids, store.myUserId, { rotate })
+    await sendGroupMessage(uuid, { text: wire })
+  } catch (e) {
+    console.warn('E2EE redistribute after members change:', e)
+  }
+}
+
 async function loadGroupChats() {
   try {
     const groups = await listMyGroups()
@@ -238,7 +268,11 @@ async function loadChatNames() {
 
 function initChatSession() {
   connectSocket()
-  subscribe(handleEvent)
+  if (typeof unsubscribeWs === 'function') {
+    unsubscribeWs()
+    unsubscribeWs = null
+  }
+  unsubscribeWs = subscribe(handleEvent)
   // Identity + публикация публичного ключа на messages API (не в ленту)
   ensureIdentity()
     .then(() => publishMyPublicKey())
@@ -317,6 +351,12 @@ function handleEvent(event) {
   // Вас добавили в группу — сразу показать в списке, без релогина
   if (event.groupAdded) {
     store.ensureGroupChat(event.groupAdded)
+    return
+  }
+
+  // Состав группы изменился → у кого есть GroupKey, перераздаём (или ротируем при remove)
+  if (event.groupMembersChanged) {
+    handleGroupMembersChanged(event.groupMembersChanged)
     return
   }
 

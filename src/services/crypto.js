@@ -15,6 +15,10 @@ const E2EE_PREFIX_LEGACY = '🔒e2ee:v1:'
 const E2EE_PREFIX_V2_LEGACY = '🔒e2ee:v2:'
 const E2EE_PREFIX_V3_LEGACY = '🔒e2ee:v3:'
 export const KEY_ANNOUNCE_PREFIX = '__E2EE_KEY__:'
+export const E2EE_GROUP_PREFIX = 'e2ee:gv1:'
+const E2EE_GROUP_PREFIX_LEGACY = '🔒e2ee:gv1:'
+export const GROUP_KEY_MSG_PREFIX = '__GROUP_KEY__:'
+const LS_GROUP_KEYS = 'cc_e2ee_group_keys'
 
 const LS_IK_PRIV = 'cc_e2ee_ik_priv_jwk'
 const LS_IK_PUB = 'cc_e2ee_ik_pub_spki'
@@ -411,7 +415,8 @@ export function isEncryptedText(text) {
   return (
     text.startsWith(E2EE_PREFIX_V3) || text.startsWith(E2EE_PREFIX_V3_LEGACY) ||
     text.startsWith(E2EE_PREFIX_V2) || text.startsWith(E2EE_PREFIX_V2_LEGACY) ||
-    text.startsWith(E2EE_PREFIX) || text.startsWith(E2EE_PREFIX_LEGACY)
+    text.startsWith(E2EE_PREFIX) || text.startsWith(E2EE_PREFIX_LEGACY) ||
+    text.startsWith(E2EE_GROUP_PREFIX) || text.startsWith(E2EE_GROUP_PREFIX_LEGACY)
   )
 }
 
@@ -460,4 +465,220 @@ export async function resolveE2eeDisplayText(peerId, rawText) {
     console.warn('resolveE2eeDisplayText:', e)
     return 'Зашифрованное сообщение'
   }
+}
+
+
+// ─── Group E2EE (sender key / shared group key) ─────────────────────────────
+
+function loadGroupKeyMap() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_GROUP_KEYS) || '{}') || {}
+  } catch {
+    return {}
+  }
+}
+
+function saveGroupKeyMap(map) {
+  localStorage.setItem(LS_GROUP_KEYS, JSON.stringify(map))
+}
+
+/**
+ * @returns {{ keyB64: string, epoch: number }|null}
+ */
+export function getGroupKey(groupUuid) {
+  const id = String(groupUuid || '').trim()
+  if (!id) return null
+  const row = loadGroupKeyMap()[id]
+  if (!row?.keyB64) return null
+  return { keyB64: row.keyB64, epoch: Number(row.epoch) || 1 }
+}
+
+export function hasGroupKey(groupUuid) {
+  return !!getGroupKey(groupUuid)
+}
+
+export function storeGroupKey(groupUuid, keyB64, epoch = 1) {
+  const id = String(groupUuid || '').trim()
+  if (!id || !keyB64) return
+  const map = loadGroupKeyMap()
+  const prev = map[id]
+  // не затирать более новый epoch более старым
+  if (prev && Number(prev.epoch) > Number(epoch)) return
+  map[id] = { keyB64, epoch: Number(epoch) || 1 }
+  saveGroupKeyMap(map)
+}
+
+/** Создать новый GroupKey (AES-256 raw → base64) */
+export async function createGroupKey(groupUuid) {
+  if (!isCryptoAvailable()) throw new Error('WebCrypto недоступен')
+  const raw = crypto.getRandomValues(new Uint8Array(32))
+  const keyB64 = bufToB64(raw)
+  storeGroupKey(groupUuid, keyB64, 1)
+  return { keyB64, epoch: 1 }
+}
+
+/**
+ * Ротация ключа (после kick/leave в будущем).
+ * @returns {{ keyB64: string, epoch: number }}
+ */
+export async function rotateGroupKey(groupUuid) {
+  const prev = getGroupKey(groupUuid)
+  const epoch = (prev?.epoch || 0) + 1
+  const raw = crypto.getRandomValues(new Uint8Array(32))
+  const keyB64 = bufToB64(raw)
+  storeGroupKey(groupUuid, keyB64, epoch)
+  return { keyB64, epoch }
+}
+
+/**
+ * Зашифровать текст ключом группы → e2ee:gv1:<b64(iv+ct)>
+ */
+export async function encryptForGroup(groupUuid, plainText) {
+  const row = getGroupKey(groupUuid)
+  if (!row?.keyB64) throw new Error('E2EE: нет ключа группы')
+  if (!isCryptoAvailable()) throw new Error('WebCrypto недоступен')
+  const mk = b64ToBytes(row.keyB64)
+  if (mk.length !== 32) throw new Error('E2EE: повреждённый ключ группы')
+  const payload = await aesGcmEncrypt(mk, plainText)
+  const wire = E2EE_GROUP_PREFIX + bufToB64(payload)
+  cachePlaintext(wire, plainText)
+  return wire
+}
+
+/**
+ * Расшифровать group ciphertext. peerId не нужен.
+ */
+export async function decryptFromGroup(groupUuid, text) {
+  if (!text || typeof text !== 'string') return text || ''
+  const cached = getCachedPlaintext(text)
+  if (cached != null) return cached
+
+  if (!text.startsWith(E2EE_GROUP_PREFIX) && !text.startsWith(E2EE_GROUP_PREFIX_LEGACY)) {
+    return text
+  }
+  const row = getGroupKey(groupUuid)
+  if (!row?.keyB64) return 'Зашифрованное сообщение'
+  try {
+    const prefixLen = text.startsWith(E2EE_GROUP_PREFIX_LEGACY)
+      ? E2EE_GROUP_PREFIX_LEGACY.length
+      : E2EE_GROUP_PREFIX.length
+    const payload = b64ToBytes(text.slice(prefixLen))
+    const mk = b64ToBytes(row.keyB64)
+    const plain = await aesGcmDecrypt(mk, payload)
+    cachePlaintext(text, plain)
+    return plain
+  } catch (e) {
+    console.warn('decryptFromGroup failed:', e)
+    return 'Зашифрованное сообщение'
+  }
+}
+
+export function isGroupEncryptedText(text) {
+  return typeof text === 'string' && (
+    text.startsWith(E2EE_GROUP_PREFIX) || text.startsWith(E2EE_GROUP_PREFIX_LEGACY)
+  )
+}
+
+export function isGroupKeyMessage(text) {
+  return typeof text === 'string' && text.startsWith(GROUP_KEY_MSG_PREFIX)
+}
+
+/**
+ * Собрать control-message с пакетами ключа для участников.
+ * packages[userId] = encryptForPeer(userId, JSON.stringify({ groupUuid, keyB64, epoch }))
+ *
+ * @param {string} groupUuid
+ * @param {number[]} memberUserIds messages-local ids
+ * @param {number} myUserId
+ * @returns {Promise<string>} wire text for sendGroupMessage
+ */
+export async function buildGroupKeyDistributionMessage(groupUuid, memberUserIds, myUserId) {
+  const row = getGroupKey(groupUuid)
+  if (!row?.keyB64) throw new Error('E2EE: нет ключа группы для раздачи')
+
+  const payload = JSON.stringify({
+    groupUuid: String(groupUuid),
+    keyB64: row.keyB64,
+    epoch: row.epoch
+  })
+
+  const packages = {}
+  const ids = [...new Set((memberUserIds || []).map(Number).filter(Boolean))]
+  for (const uid of ids) {
+    if (uid === Number(myUserId)) continue
+    try {
+      await prepareE2eeForPeer(uid)
+      packages[String(uid)] = await encryptForPeer(uid, payload)
+    } catch (e) {
+      console.warn('group key package for', uid, e)
+    }
+  }
+
+  const body = {
+    v: 1,
+    groupUuid: String(groupUuid),
+    epoch: row.epoch,
+    packages
+  }
+  return GROUP_KEY_MSG_PREFIX + bufToB64(textEncoder.encode(JSON.stringify(body)))
+}
+
+/**
+ * Принять control-message раздачи ключа.
+ * @returns {Promise<boolean>} true если ключ сохранён
+ */
+export async function consumeGroupKeyMessage(senderId, text, myUserId) {
+  if (!isGroupKeyMessage(text)) return false
+  try {
+    const raw = text.slice(GROUP_KEY_MSG_PREFIX.length)
+    const json = textDecoder.decode(b64ToBytes(raw))
+    const body = JSON.parse(json)
+    const pack = body?.packages?.[String(myUserId)] || body?.packages?.[myUserId]
+    if (!pack) {
+      // возможно ключ уже наш / мы отправитель
+      return false
+    }
+    const plain = await decryptFromPeer(senderId, pack)
+    const data = typeof plain === 'string' ? JSON.parse(plain) : plain
+    if (!data?.keyB64 || !data?.groupUuid) return false
+    storeGroupKey(data.groupUuid, data.keyB64, data.epoch || body.epoch || 1)
+    return true
+  } catch (e) {
+    console.warn('consumeGroupKeyMessage:', e)
+    return false
+  }
+}
+
+/**
+ * UI-текст для group-сообщений (учитывает group ciphertext и control).
+ */
+export async function resolveGroupE2eeDisplayText(groupUuid, rawText, senderId, myUserId) {
+  if (rawText == null || rawText === '') return ''
+  if (isGroupKeyMessage(rawText)) {
+    await consumeGroupKeyMessage(senderId, rawText, myUserId)
+    return '' // не показывать в ленте
+  }
+  if (isGroupEncryptedText(rawText)) {
+    return decryptFromGroup(groupUuid, rawText)
+  }
+  // pairwise e2ee случайно попал в группу
+  if (isEncryptedText(rawText)) {
+    return resolveE2eeDisplayText(senderId, rawText)
+  }
+  return rawText
+}
+
+
+/**
+ * Если у нас есть GroupKey — пересобрать packages и вернуть wire для sendGroupMessage.
+ * При removedUserIds — сначала rotateGroupKey.
+ */
+export async function redistributeGroupKey(groupUuid, memberUserIds, myUserId, { rotate = false } = {}) {
+  const uuid = String(groupUuid || '').trim()
+  if (!uuid) throw new Error('no group uuid')
+  if (rotate || !hasGroupKey(uuid)) {
+    if (rotate) await rotateGroupKey(uuid)
+    else await createGroupKey(uuid)
+  }
+  return buildGroupKeyDistributionMessage(uuid, memberUserIds, myUserId)
 }

@@ -40,7 +40,7 @@
               v-model="title"
               type="text"
               maxlength="80"
-              placeholder="Имя группы"
+              placeholder="Например: Команда"
               @keydown.enter.prevent="submit"
             />
           </label>
@@ -102,10 +102,13 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { searchUsers, resolveMessagesIdByUuid } from '../services/users'
-import { createGroup } from '../services/groups'
+import { createGroup, listGroupMembers, sendGroupMessage } from '../services/groups'
+import { createGroupKey, buildGroupKeyDistributionMessage } from '../services/crypto'
+import { useChatStore } from '../stores/chat'
 import { uploadFile } from '../services/files'
 
 const emit = defineEmits(['close', 'created'])
+const store = useChatStore()
 
 const title = ref('')
 const query = ref('')
@@ -210,6 +213,24 @@ async function submit() {
       avatar_file_uuid: avatarUuid,
       member_user_ids: memberIds
     })
+
+    // E2EE: ключ группы + раздача участникам
+    try {
+      const uuid = group.group_uuid || group.groupUuid
+      if (uuid) {
+        await createGroupKey(uuid)
+        let ids = [...memberIds]
+        try {
+          const members = await listGroupMembers(uuid)
+          ids = (members || []).map((m) => Number(m.user_id || m.userId)).filter(Boolean)
+        } catch (_) {}
+        const wire = await buildGroupKeyDistributionMessage(uuid, ids, store.myUserId)
+        await sendGroupMessage(uuid, { text: wire })
+      }
+    } catch (e) {
+      console.warn('group E2EE init failed:', e)
+    }
+
     emit('created', group)
     emit('close')
   } catch (e) {

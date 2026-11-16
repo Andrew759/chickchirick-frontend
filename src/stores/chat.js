@@ -3,10 +3,15 @@ import { nextTick } from 'vue'
 import { parseFileMessageText } from '../services/fileMarker'
 import { isImageFilename, isAudioFilename, isVideoFilename, isVoiceFilename } from '../services/files'
 import {
+  isKeyAnnounce,
   tryConsumeKeyAnnounce,
   isEncryptedText,
-  isKeyAnnounce,
-  resolveE2eeDisplayText
+  isCryptoAvailable,
+  resolveE2eeDisplayText,
+  isGroupKeyMessage,
+  isGroupEncryptedText,
+  resolveGroupE2eeDisplayText,
+  consumeGroupKeyMessage
 } from '../services/crypto'
 import { getGroup } from '../services/groups'
 
@@ -206,6 +211,8 @@ export const useChatStore = defineStore('chat', {
     viewedProfile: null,
     /** Открытая панель свойств группы */
     viewedGroup: null,
+    /** ids сообщений, которые сейчас обрабатывает upsert (антигонка) */
+    pendingMessageIds: {},
     /** messages-local user id -> whether the peer is currently typing */
     typingByChatId: {}
   }),
@@ -349,8 +356,27 @@ export const useChatStore = defineStore('chat', {
         if (message.id != null && chat.messages.some((m) => m.id === message.id)) continue
 
         let extra = normalizeMessageFields(message)
-        const encrypted = isEncryptedText(rawText)
-        if (!groupId && (encrypted || (typeof rawText === 'string' && /^e2ee:v\d+:/i.test(rawText.trim())))) {
+        // control: раздача group key — съесть и не показывать
+        if (groupId && isGroupKeyMessage(rawText)) {
+          try {
+            await consumeGroupKeyMessage(senderId, rawText, this.myUserId)
+          } catch (e) {
+            console.warn('group key in history:', e)
+          }
+          continue
+        }
+
+        const encrypted = isEncryptedText(rawText) || isGroupEncryptedText(rawText)
+        if (groupId && (isGroupEncryptedText(rawText) || isEncryptedText(rawText))) {
+          try {
+            const plain = await resolveGroupE2eeDisplayText(groupId, rawText, senderId, this.myUserId)
+            if (plain === '' && isGroupKeyMessage(rawText)) continue
+            extra = normalizeMessageFields({ text: plain })
+          } catch (e) {
+            console.warn('decrypt group in setHistory:', e)
+            extra = { ...extra, text: 'Зашифрованное сообщение' }
+          }
+        } else if (!groupId && (encrypted || (typeof rawText === 'string' && /^e2ee:v\d+:/i.test(rawText.trim())))) {
           const peerId = isMine ? recipientId : senderId
           try {
             const plain = await resolveE2eeDisplayText(peerId, rawText)
@@ -373,7 +399,7 @@ export const useChatStore = defineStore('chat', {
           isVideo: extra.isVideo,
           isVideoNote: extra.isVideoNote,
           isVoiceMessage: extra.isVoiceMessage,
-          isEncrypted: !!encrypted && !groupId,
+          isEncrypted: !!encrypted,
           fromMe: isMine,
           senderId,
           recipientId,
@@ -472,43 +498,94 @@ export const useChatStore = defineStore('chat', {
         }
       }
 
-      if (msg.id != null && chat.messages.some((m) => m.id === msg.id)) return
-
-      let extra = normalizeMessageFields(msg)
-      const encrypted = isEncryptedText(rawText) || (typeof rawText === 'string' && /^e2ee:v\d+:/i.test(rawText.trim()))
-
-      if (encrypted) {
-        const peerId = isMine ? recipientId : senderId
-        try {
-          const plain = await resolveE2eeDisplayText(peerId, rawText)
-          extra = normalizeMessageFields({ text: plain })
-        } catch (e) {
-          console.warn('decrypt in upsertMessage:', e)
-          extra = { ...extra, text: 'Зашифрованное сообщение' }
-        }
+      const mid = msg.id != null ? Number(msg.id) : null
+      if (mid != null && !Number.isNaN(mid)) {
+        if (chat.messages.some((m) => Number(m.id) === mid)) return
+        if (this.pendingMessageIds[mid]) return
+        this.pendingMessageIds[mid] = true
       }
 
-      chat.messages.push({
-        id: msg.id,
-        text: extra.text,
-        fileUuid: extra.fileUuid,
-        fileName: extra.fileName,
-        audioUuid: extra.audioUuid || null,
-        isSticker: !!extra.isSticker,
-        isImage: extra.isImage,
-        isAudio: extra.isAudio,
-        isVideo: extra.isVideo,
-        isVideoNote: extra.isVideoNote,
-        isVoiceMessage: extra.isVoiceMessage,
-        isEncrypted: encrypted,
-        fromMe: isMine,
-        senderId,
-        recipientId,
-        createdAt: normalizeCreatedAt(msg.createdAt)
-      })
+      try {
+        // control: group key distribution
+        if (groupId && isGroupKeyMessage(rawText)) {
+          try {
+            await consumeGroupKeyMessage(senderId, rawText, this.myUserId)
+          } catch (e) {
+            console.warn('group key in upsert:', e)
+          }
+          return
+        }
 
-      sortChatMessages(chat)
-      sortChatsByLastMessage(this.chats)
+        let extra = normalizeMessageFields(msg)
+        const encrypted =
+          isEncryptedText(rawText) ||
+          isGroupEncryptedText(rawText) ||
+          (typeof rawText === 'string' && /^e2ee:v\d+:/i.test(rawText.trim()))
+
+        if (groupId && (isGroupEncryptedText(rawText) || isEncryptedText(rawText))) {
+          try {
+            const plain = await resolveGroupE2eeDisplayText(groupId, rawText, senderId, this.myUserId)
+            if (plain === '' && isGroupKeyMessage(rawText)) return
+            extra = normalizeMessageFields({ text: plain })
+          } catch (e) {
+            console.warn('decrypt group in upsert:', e)
+            extra = { ...extra, text: 'Зашифрованное сообщение' }
+          }
+        } else if (!groupId && encrypted) {
+          const peerId = isMine ? recipientId : senderId
+          try {
+            const plain = await resolveE2eeDisplayText(peerId, rawText)
+            extra = normalizeMessageFields({ text: plain })
+          } catch (e) {
+            console.warn('decrypt in upsertMessage:', e)
+            extra = { ...extra, text: 'Зашифрованное сообщение' }
+          }
+        }
+
+        // повторная проверка после await (гонка двух WS-кадров)
+        if (mid != null && chat.messages.some((m) => Number(m.id) === mid)) return
+
+        // мягкий дедуп без id: тот же sender+text+group за 3с
+        if (mid == null || Number.isNaN(mid)) {
+          const createdAt = normalizeCreatedAt(msg.createdAt)
+          const dup = chat.messages.some((m) => {
+            if (Number(m.senderId) !== senderId) return false
+            if ((m.text || '') !== (extra.text || '')) return false
+            if ((m.groupId || null) !== (groupId || null)) return false
+            const t1 = new Date(m.createdAt || 0).getTime()
+            const t2 = new Date(createdAt || 0).getTime()
+            return Math.abs(t1 - t2) < 3000
+          })
+          if (dup) return
+        }
+
+        chat.messages.push({
+          id: mid != null && !Number.isNaN(mid) ? mid : msg.id,
+          text: extra.text,
+          fileUuid: extra.fileUuid,
+          fileName: extra.fileName,
+          audioUuid: extra.audioUuid || null,
+          isSticker: !!extra.isSticker,
+          isImage: extra.isImage,
+          isAudio: extra.isAudio,
+          isVideo: extra.isVideo,
+          isVideoNote: extra.isVideoNote,
+          isVoiceMessage: extra.isVoiceMessage,
+          isEncrypted: encrypted,
+          fromMe: isMine,
+          senderId,
+          recipientId,
+          groupId: groupId || undefined,
+          createdAt: normalizeCreatedAt(msg.createdAt)
+        })
+
+        sortChatMessages(chat)
+        sortChatsByLastMessage(this.chats)
+      } finally {
+        if (mid != null && !Number.isNaN(mid)) {
+          delete this.pendingMessageIds[mid]
+        }
+      }
     },
 
     setUserInfo(userId, user) {

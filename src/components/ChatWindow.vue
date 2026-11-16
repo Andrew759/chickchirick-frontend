@@ -73,7 +73,7 @@
 import { computed, ref, watch, nextTick } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { sendMessage, sendTyping, requestDeleteMessage } from '../services/socket'
-import { isGroupChatId, parseGroupUuid, sendGroupMessage } from '../services/groups'
+import { isGroupChatId, parseGroupUuid, sendGroupMessage, listGroupMembers } from '../services/groups'
 import { resolveChatUsers } from '../services/users'
 import { uploadFile, linkFileToMessage, getFileUrl } from '../services/files'
 import { buildFileMessageText } from '../services/fileMarker'
@@ -81,8 +81,12 @@ import {
   canEncryptFor,
   encryptForPeer,
   prepareE2eeForPeer,
-  getPeerPublicKey
-} from '../services/crypto' 
+  getPeerPublicKey,
+  encryptForGroup,
+  hasGroupKey,
+  createGroupKey,
+  buildGroupKeyDistributionMessage
+} from '../services/crypto'
 import MessageInput from './MessageInput.vue'
 import MessageBubble from './MessageBubble.vue'
 import PhotoViewer from './PhotoViewer.vue'
@@ -285,6 +289,25 @@ async function ensureE2eeReady(recipientId) {
 /**
  * Шифрует текст, если возможно; иначе отправляет plaintext.
  */
+
+/**
+ * Group E2EE: если ключа нет — создаём и рассылаем участникам.
+ * Участники без ключа получают его через __GROUP_KEY__ control-message.
+ */
+async function ensureGroupE2eeReady(groupUuid) {
+  if (!groupUuid) return
+  if (hasGroupKey(groupUuid)) return
+  try {
+    await createGroupKey(groupUuid)
+    const members = await listGroupMembers(groupUuid)
+    const ids = (members || []).map((m) => Number(m.user_id || m.userId)).filter(Boolean)
+    const wire = await buildGroupKeyDistributionMessage(groupUuid, ids, store.myUserId)
+    await sendGroupMessage(groupUuid, { text: wire })
+  } catch (e) {
+    console.warn('ensureGroupE2eeReady:', e)
+  }
+}
+
 async function maybeEncrypt(recipientId, plainText) {
   if (!plainText) return plainText
   if (!canEncryptFor(recipientId)) {
@@ -321,6 +344,8 @@ async function handleSend(payload) {
 
   if (!isGroup) {
     await ensureE2eeReady(recipientId)
+  } else {
+    await ensureGroupE2eeReady(groupUuid)
   }
 
   async function deliver(text) {
@@ -329,6 +354,21 @@ async function handleSend(payload) {
       return
     }
     sendMessage({ recipientId, text })
+  }
+
+  async function maybeEncryptOutgoing(plain) {
+    if (!plain) return plain
+    if (isGroup) {
+      try {
+        if (!hasGroupKey(groupUuid)) await ensureGroupE2eeReady(groupUuid)
+        if (!hasGroupKey(groupUuid)) return plain
+        return await encryptForGroup(groupUuid, plain)
+      } catch (e) {
+        console.warn('group E2EE encrypt failed, plaintext:', e)
+        return plain
+      }
+    }
+    return maybeEncrypt(recipientId, plain)
   }
 
   // Стикер: файл уже в files-сервисе (image_uuid), upload не нужен
@@ -341,14 +381,14 @@ async function handleSend(payload) {
       sticker.emoji || '',
       audioUuid
     )
-    const text = isGroup ? plain : await maybeEncrypt(recipientId, plain)
+    const text = await maybeEncryptOutgoing(plain)
     await deliver(text)
     waitAndLinkFile(fileUuid)
     return
   }
 
   if (!file) {
-    const text = isGroup ? caption : await maybeEncrypt(recipientId, caption)
+    const text = await maybeEncryptOutgoing(caption)
     await deliver(text)
     return
   }
@@ -365,7 +405,7 @@ async function handleSend(payload) {
 
   // 2) текст с маркером → шифруем целиком (caption + file marker)
   const plain = buildFileMessageText(fileUuid, file.name, caption)
-  const text = isGroup ? plain : await maybeEncrypt(recipientId, plain)
+  const text = await maybeEncryptOutgoing(plain)
   await deliver(text)
 
   // 3) после появления сообщения в store — привязка file_uuid в messages

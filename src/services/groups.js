@@ -128,3 +128,22 @@ export async function listGroupMembers(groupUuid) {
   }
   return res.json()
 }
+
+
+/**
+ * @param {string} groupUuid
+ * @param {number[]} memberUserIds messages-local ids
+ */
+export async function addGroupMembers(groupUuid, memberUserIds) {
+  const res = await fetch(`${API}/group-chats/${encodeURIComponent(groupUuid)}/members`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ member_user_ids: memberUserIds || [] })
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || `add members failed: ${res.status}`)
+  }
+  return res.json()
+}
