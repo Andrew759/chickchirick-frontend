@@ -27,10 +27,7 @@
         </span>
         <span class="chat-title">
           <span class="chat-name">{{ chat.name }}</span>
-          <span v-if="isGroupChat && chat.memberCount" class="typing-status">
-            {{ chat.memberCount }} участников
-          </span>
-          <span v-else-if="isPeerTyping" class="typing-status">печатает...</span>
+          <span v-if="headerSubtitle" class="typing-status">{{ headerSubtitle }}</span>
         </span>
       </button>
     </div>
@@ -73,7 +70,7 @@
 import { computed, ref, watch, nextTick } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { sendMessage, sendTyping, requestDeleteMessage } from '../services/socket'
-import { isGroupChatId, parseGroupUuid, sendGroupMessage, listGroupMembers } from '../services/groups'
+import { isGroupChatId, parseGroupUuid, sendGroupMessage, listGroupMembers, sendGroupTyping } from '../services/groups'
 import { resolveChatUsers } from '../services/users'
 import { uploadFile, linkFileToMessage, getFileUrl } from '../services/files'
 import { buildFileMessageText } from '../services/fileMarker'
@@ -168,7 +165,31 @@ const voiceQueue = computed(() =>
     }))
 )
 const chatUser = computed(() => store.usersById[chat.value?.id] || {})
-const isPeerTyping = computed(() => Boolean(chat.value?.id && store.typingByChatId[chat.value.id]))
+const isPeerTyping = computed(() => {
+  const id = chat.value?.id
+  if (!id) return false
+  const v = store.typingByChatId[id]
+  if (!v) return false
+  if (v === true) return true
+  if (typeof v === 'object') return Object.keys(v).length > 0
+  return false
+})
+
+/** Подзаголовок: typing в группе/личке или число участников */
+const headerSubtitle = computed(() => {
+  if (!chat.value) return ''
+  const label = store.typingLabel?.(chat.value.id) || ''
+  if (label) return label
+  if (isGroupChat.value) {
+    const n = Number(chat.value.memberCount || chat.value.member_count || 0)
+    if (n === 1) return '1 участник'
+    if (n >= 2 && n <= 4) return `${n} участника`
+    if (n > 4) return `${n} участников`
+  }
+  if (isPeerTyping.value) return 'печатает...'
+  return ''
+})
+
 const emit = defineEmits(['open-profile', 'open-group-profile', 'back'])
 const messagesEl = ref(null)
 
@@ -274,7 +295,19 @@ function openVideo(msg) {
  */
 function handleTyping(active) {
   const recipientId = chat.value?.id
-  if (!recipientId || isGroupChatId(recipientId)) return
+  if (!recipientId) return
+  const groupUuid = parseGroupUuid(recipientId)
+  if (groupUuid) {
+    // Основной путь — WS (как личный typing), REST — запасной
+    sendMessage({
+      type: 'typing',
+      groupId: groupUuid,
+      typing: Boolean(active),
+      text: active ? '1' : '0'
+    })
+    sendGroupTyping(groupUuid, active).catch(() => {})
+    return
+  }
   sendTyping(recipientId, active)
 }
 

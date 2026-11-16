@@ -643,26 +643,80 @@ export const useChatStore = defineStore('chat', {
       this.activeChatId = next
     },
 
-    setTyping(userId, active) {
-      const id = Number(userId)
-      if (!id || id === Number(this.myUserId)) return
+    setTyping(userId, active, groupId = null) {
+      const sid = Number(userId)
+      if (!sid || sid === Number(this.myUserId)) return
 
-      this.typingByChatId[id] = Boolean(active)
+      // group: chat key = "group:<uuid>"; direct: chat key = peer user id
+      const chatKey = groupId ? `group:${groupId}` : sid
+      const timerKey = groupId ? `${chatKey}:${sid}` : String(sid)
 
-      const previousTimer = typingTimers.get(id)
+      if (groupId) {
+        const cur = this.typingByChatId[chatKey]
+        const map = cur && typeof cur === 'object' ? { ...cur } : {}
+        if (active) map[sid] = true
+        else delete map[sid]
+        const keys = Object.keys(map)
+        // новый объект целиком — чтобы Pinia/Vue гарантированно перерисовали
+        this.typingByChatId = {
+          ...this.typingByChatId,
+          [chatKey]: keys.length ? map : false
+        }
+      } else {
+        this.typingByChatId = {
+          ...this.typingByChatId,
+          [chatKey]: Boolean(active)
+        }
+      }
+
+      const previousTimer = typingTimers.get(timerKey)
       if (previousTimer) clearTimeout(previousTimer)
 
       if (active) {
-        // Даже если stop-событие потеряется при обрыве WS, индикатор
-        // автоматически исчезнет через 2.5 секунды.
         const timer = setTimeout(() => {
-          this.typingByChatId[id] = false
-          typingTimers.delete(id)
+          if (groupId) {
+            const cur = this.typingByChatId[chatKey]
+            if (cur && typeof cur === 'object') {
+              const map = { ...cur }
+              delete map[sid]
+              this.typingByChatId = {
+                ...this.typingByChatId,
+                [chatKey]: Object.keys(map).length ? map : false
+              }
+            }
+          } else {
+            this.typingByChatId = {
+              ...this.typingByChatId,
+              [chatKey]: false
+            }
+          }
+          typingTimers.delete(timerKey)
         }, 2500)
-        typingTimers.set(id, timer)
+        typingTimers.set(timerKey, timer)
       } else {
-        typingTimers.delete(id)
+        typingTimers.delete(timerKey)
       }
+    },
+
+    /** Имена тех, кто печатает в чате (для группы). */
+    typingLabel(chatId) {
+      const v = this.typingByChatId[chatId]
+      if (!v) return ''
+      if (v === true) return 'печатает...'
+      if (typeof v === 'object') {
+        const ids = Object.keys(v).map(Number).filter(Boolean)
+        if (!ids.length) return ''
+        const names = ids.map((id) => {
+          const u = this.usersById[id]
+          if (!u) return 'Кто-то'
+          const n = [u.name, u.surname].filter(Boolean).join(' ').trim()
+          return n || u.login || 'Кто-то'
+        })
+        if (names.length === 1) return `${names[0]} печатает...`
+        if (names.length === 2) return `${names[0]} и ${names[1]} печатают...`
+        return `${names[0]} и ещё ${names.length - 1} печатают...`
+      }
+      return ''
     },
 
     /**

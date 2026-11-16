@@ -180,7 +180,7 @@
             <div class="row">
               <div class="name-wrap">
                 <div class="name">{{ chat.name }}</div>
-                <span v-if="store.typingByChatId[chat.id]" class="typing-dots" aria-label="печатает">
+                <span v-if="store.typingByChatId[chat.id]" class="typing-dots" :aria-label="store.typingLabel(chat.id) || 'печатает'">
                   <span></span><span></span><span></span>
                 </span>
               </div>

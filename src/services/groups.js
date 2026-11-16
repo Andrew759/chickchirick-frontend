@@ -147,3 +147,22 @@ export async function addGroupMembers(groupUuid, memberUserIds) {
   }
   return res.json()
 }
+
+
+/**
+ * Индикатор «печатает» в группе.
+ * @param {string} groupUuid
+ * @param {boolean} typing
+ */
+export async function sendGroupTyping(groupUuid, typing) {
+  const res = await fetch(`${API}/group-chats/${encodeURIComponent(groupUuid)}/typing`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ typing: Boolean(typing) })
+  })
+  // 204 — ок; ошибки глотаем (не мешаем набору текста)
+  if (!res.ok && res.status !== 204) {
+    console.warn('group typing failed', res.status)
+  }
+}

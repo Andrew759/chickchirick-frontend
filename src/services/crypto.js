@@ -152,7 +152,11 @@ function cachePlaintext(ciphertext, plaintext) {
 
 function getCachedPlaintext(ciphertext) {
   if (!ciphertext) return null
-  return loadPlainCache()[ciphertext] ?? null
+  const v = loadPlainCache()[ciphertext]
+  if (v == null) return null
+  // не возвращаем закэшированный фейл
+  if (v === 'Зашифрованное сообщение') return null
+  return v
 }
 
 export async function ensureIdentity() {
@@ -319,10 +323,15 @@ export function canEncryptFor(peerId) {
   return !!getPeerPublicKey(peerId) && isCryptoAvailable()
 }
 
-export async function encryptForPeer(peerId, plainText) {
+export async function encryptForPeer(peerId, plainText, opts = {}) {
   await ensureIdentity()
-  let peerPubB64 = getPeerPublicKey(peerId)
-  if (!peerPubB64) peerPubB64 = await fetchPeerPublicKey(peerId)
+  const forceRefresh = Boolean(opts.forceRefreshKey)
+  let peerPubB64 = forceRefresh ? null : getPeerPublicKey(peerId)
+  if (!peerPubB64 || forceRefresh) {
+    const fresh = await fetchPeerPublicKey(peerId)
+    if (fresh) peerPubB64 = fresh
+    else if (!peerPubB64) peerPubB64 = getPeerPublicKey(peerId)
+  }
   if (!peerPubB64) throw new Error('E2EE: нет публичного ключа собеседника')
 
   const eph = await generateEcdhPair()
@@ -377,7 +386,7 @@ async function decryptV3(text) {
     const shared = await ecdh(myPriv, ephPub)
     const mk = await hkdf(shared, new Uint8Array(32), 'ChickChirick-E2EE-v3', 32)
     const plain = await aesGcmDecrypt(mk, payload)
-    cachePlaintext(text, plain)
+    if (plain && plain !== 'Зашифрованное сообщение') cachePlaintext(text, plain)
     return plain
   } catch (e) {
     console.warn('decryptV3 failed:', e)
@@ -607,8 +616,15 @@ export async function buildGroupKeyDistributionMessage(groupUuid, memberUserIds,
   for (const uid of ids) {
     if (uid === Number(myUserId)) continue
     try {
-      await prepareE2eeForPeer(uid)
-      packages[String(uid)] = await encryptForPeer(uid, payload)
+      await ensureIdentity()
+      try { await publishMyPublicKey() } catch (_) {}
+      // всегда свежий ключ с API — иначе package не откроется после ротации IK
+      const peerKey = await fetchPeerPublicKey(uid)
+      if (!peerKey) {
+        console.warn('group key package: no public key for', uid)
+        continue
+      }
+      packages[String(uid)] = await encryptForPeer(uid, payload, { forceRefreshKey: true })
     } catch (e) {
       console.warn('group key package for', uid, e)
     }
@@ -630,19 +646,49 @@ export async function buildGroupKeyDistributionMessage(groupUuid, memberUserIds,
 export async function consumeGroupKeyMessage(senderId, text, myUserId) {
   if (!isGroupKeyMessage(text)) return false
   try {
+    await ensureIdentity()
     const raw = text.slice(GROUP_KEY_MSG_PREFIX.length)
-    const json = textDecoder.decode(b64ToBytes(raw))
-    const body = JSON.parse(json)
-    const pack = body?.packages?.[String(myUserId)] || body?.packages?.[myUserId]
-    if (!pack) {
-      // возможно ключ уже наш / мы отправитель
+    let body
+    try {
+      body = JSON.parse(textDecoder.decode(b64ToBytes(raw)))
+    } catch (e) {
+      console.warn('consumeGroupKeyMessage: bad envelope', e)
       return false
     }
-    const plain = await decryptFromPeer(senderId, pack)
-    const data = typeof plain === 'string' ? JSON.parse(plain) : plain
-    if (!data?.keyB64 || !data?.groupUuid) return false
-    storeGroupKey(data.groupUuid, data.keyB64, data.epoch || body.epoch || 1)
-    return true
+    const packs = body?.packages && typeof body.packages === 'object' ? body.packages : {}
+    const candidates = []
+    const my = myUserId != null ? String(myUserId) : ''
+    if (my && packs[my]) candidates.push(packs[my])
+    // fallback: перебор всех packages (рассинхрон messages-local id)
+    for (const [k, v] of Object.entries(packs)) {
+      if (k === my) continue
+      if (typeof v === 'string' && v) candidates.push(v)
+    }
+    if (!candidates.length) return false
+
+    for (const pack of candidates) {
+      try {
+        // не используем кэш «Зашифрованное сообщение»
+        const plain = await decryptFromPeer(senderId, pack)
+        if (!plain || typeof plain !== 'string') continue
+        if (plain === 'Зашифрованное сообщение') continue
+        if (isEncryptedText(plain) || isGroupEncryptedText(plain)) continue
+        if (!(plain.startsWith('{') || plain.startsWith('['))) continue
+        let data
+        try {
+          data = JSON.parse(plain)
+        } catch {
+          continue
+        }
+        if (!data?.keyB64 || !data?.groupUuid) continue
+        storeGroupKey(data.groupUuid, data.keyB64, data.epoch || body.epoch || 1)
+        return true
+      } catch (e) {
+        console.warn('consumeGroupKeyMessage pack try failed', e)
+      }
+    }
+    console.warn('consumeGroupKeyMessage: no package decrypted for user', myUserId)
+    return false
   } catch (e) {
     console.warn('consumeGroupKeyMessage:', e)
     return false

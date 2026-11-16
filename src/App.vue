@@ -392,7 +392,12 @@ function handleEvent(event) {
   }
   if (event.deletedMessageId) store.deleteMessage(event.deletedMessageId)
   if (event.typing) {
-    store.setTyping(event.typing.senderId, event.typing.typing)
+    const gid = event.typing.groupId || event.typing.group_id || null
+    store.setTyping(event.typing.senderId, event.typing.typing, gid)
+    // подтянуть имя, если печатает в группе и мы его ещё не знаем
+    if (gid && event.typing.senderId && !store.usersById[event.typing.senderId]) {
+      loadChatNames()
+    }
   }
 }
 </script>
