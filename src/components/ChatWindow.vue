@@ -19,8 +19,8 @@
       >
         <span class="chat-profile-avatar">
           <img
-            v-if="isGroupChat ? chat.avatarFileUuid : chatUser.avatarFileUuid"
-            :src="getFileUrl(isGroupChat ? chat.avatarFileUuid : chatUser.avatarFileUuid)"
+            v-if="(isGroupChat || isChannelChat) ? chat.avatarFileUuid : chatUser.avatarFileUuid"
+            :src="getFileUrl((isGroupChat || isChannelChat) ? chat.avatarFileUuid : chatUser.avatarFileUuid)"
             alt=""
           />
           <span v-else>{{ (chat.name || '?').charAt(0).toUpperCase() }}</span>
@@ -48,7 +48,8 @@
       />
     </div>
 
-    <MessageInput @send="handleSend" @typing="handleTyping" />
+    <div v-if="isChannelChat && !canPostToChannel" class="channel-ro-hint"></div>
+      <MessageInput v-if="canPostToChannel" @send="handleSend" @typing="handleTyping" />
 
     <PhotoViewer
       :open="viewerOpen"
@@ -71,6 +72,7 @@ import { computed, ref, watch, nextTick } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { sendMessage, sendTyping, requestDeleteMessage } from '../services/socket'
 import { isGroupChatId, parseGroupUuid, sendGroupMessage, listGroupMembers, sendGroupTyping } from '../services/groups'
+import { isChannelChatId, parseChannelUuid, sendChannelMessage, listChannelMembers, sendChannelTyping } from '../services/channels'
 import { resolveChatUsers } from '../services/users'
 import { uploadFile, linkFileToMessage, getFileUrl } from '../services/files'
 import { buildFileMessageText } from '../services/fileMarker'
@@ -82,7 +84,11 @@ import {
   encryptForGroup,
   hasGroupKey,
   createGroupKey,
-  buildGroupKeyDistributionMessage
+  buildGroupKeyDistributionMessage,
+  encryptForChannel,
+  hasChannelKey,
+  createChannelKey,
+  buildChannelKeyDistributionMessage
 } from '../services/crypto'
 import MessageInput from './MessageInput.vue'
 import MessageBubble from './MessageBubble.vue'
@@ -94,6 +100,12 @@ const store = useChatStore()
 const player = usePlayerStore()
 const chat = computed(() => store.activeChat)
 const isGroupChat = computed(() => isGroupChatId(chat.value?.id) || chat.value?.isGroup === true)
+const isChannelChat = computed(() => isChannelChatId(chat.value?.id) || chat.value?.isChannel === true || chat.value?.type === 'channel')
+const canPostToChannel = computed(() => {
+  if (!isChannelChat.value) return true
+  const role = chat.value?.myRole || chat.value?.my_role || ''
+  return role === 'owner' || role === 'admin'
+})
 
 /** Подтянуть имена/аватары отправителей групповых сообщений */
 async function loadGroupSenders() {
@@ -126,7 +138,28 @@ function onHeaderProfileClick() {
   const c = chat.value
   if (!c) return
 
-  // Группа: открываем панель свойств напрямую через store (надёжнее, чем только emit)
+  // Канал
+  if (isChannelChat.value || isChannelChatId(c.id) || c.isChannel || c.type === 'channel') {
+    const uuid = parseChannelUuid(c.id) || c.channelId || c.channel_uuid || c.channelUuid
+    if (!uuid) {
+      console.warn('openChannelProfile: no channel uuid on chat', c)
+      return
+    }
+    store.openChannelProfile({
+      channel_uuid: uuid,
+      title: c.name || c.title,
+      description: c.description || '',
+      avatar_file_uuid: c.avatarFileUuid || c.avatar_file_uuid,
+      member_count: c.memberCount || c.member_count,
+      created_by: c.createdBy || c.created_by,
+      is_public: c.isPublic ?? c.is_public,
+      e2ee_enabled: c.e2eeEnabled ?? c.e2ee_enabled,
+      my_role: c.myRole || c.my_role
+    })
+    return
+  }
+
+  // Группа
   if (isGroupChat.value || isGroupChatId(c.id) || c.isGroup || c.type === 'group') {
     const uuid = parseGroupUuid(c.id) || c.groupId || c.group_uuid || c.groupUuid
     if (!uuid) {
@@ -296,6 +329,17 @@ function openVideo(msg) {
 function handleTyping(active) {
   const recipientId = chat.value?.id
   if (!recipientId) return
+  const channelUuid = parseChannelUuid(recipientId)
+  if (channelUuid) {
+    sendMessage({
+      type: 'typing',
+      channelId: channelUuid,
+      typing: Boolean(active),
+      text: active ? '1' : '0'
+    })
+    sendChannelTyping(channelUuid, active).catch(() => {})
+    return
+  }
   const groupUuid = parseGroupUuid(recipientId)
   if (groupUuid) {
     // Основной путь — WS (как личный typing), REST — запасной
@@ -342,6 +386,21 @@ async function ensureGroupE2eeReady(groupUuid) {
   }
 }
 
+async function ensureChannelE2eeReady(channelUuid) {
+  if (!channelUuid) return
+  if (chat.value?.e2eeEnabled === false) return
+  if (hasChannelKey(channelUuid)) return
+  try {
+    await createChannelKey(channelUuid)
+    const members = await listChannelMembers(channelUuid)
+    const ids = (members || []).map((m) => Number(m.user_id || m.userId)).filter(Boolean)
+    const wire = await buildChannelKeyDistributionMessage(channelUuid, ids, store.myUserId)
+    await sendChannelMessage(channelUuid, { text: wire })
+  } catch (e) {
+    console.warn('ensureChannelE2eeReady:', e)
+  }
+}
+
 async function maybeEncrypt(recipientId, plainText) {
   if (!plainText) return plainText
   if (!canEncryptFor(recipientId)) {
@@ -374,15 +433,28 @@ async function handleSend(payload) {
   if (!caption && !file && !sticker) return
 
   const groupUuid = parseGroupUuid(recipientId)
+  const channelUuid = parseChannelUuid(recipientId)
   const isGroup = Boolean(groupUuid)
+  const isChannel = Boolean(channelUuid)
 
-  if (!isGroup) {
+  if (isChannel && !canPostToChannel.value) {
+    console.warn('subscribers cannot post to channel')
+    return
+  }
+
+  if (isChannel) {
+    await ensureChannelE2eeReady(channelUuid)
+  } else if (!isGroup) {
     await ensureE2eeReady(recipientId)
   } else {
     await ensureGroupE2eeReady(groupUuid)
   }
 
   async function deliver(text) {
+    if (isChannel) {
+      await sendChannelMessage(channelUuid, { text })
+      return
+    }
     if (isGroup) {
       await sendGroupMessage(groupUuid, { text })
       return
@@ -392,6 +464,17 @@ async function handleSend(payload) {
 
   async function maybeEncryptOutgoing(plain) {
     if (!plain) return plain
+    if (isChannel) {
+      if (chat.value?.e2eeEnabled === false) return plain
+      try {
+        if (!hasChannelKey(channelUuid)) await ensureChannelE2eeReady(channelUuid)
+        if (!hasChannelKey(channelUuid)) return plain
+        return await encryptForChannel(channelUuid, plain)
+      } catch (e) {
+        console.warn('channel E2EE encrypt failed, plaintext:', e)
+        return plain
+      }
+    }
     if (isGroup) {
       try {
         if (!hasGroupKey(groupUuid)) await ensureGroupE2eeReady(groupUuid)

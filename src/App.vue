@@ -4,7 +4,7 @@
     class="app-shell"
     :class="{
       'is-mobile': isMobile,
-      'mobile-profile-open': store.myProfileOpen || !!store.viewedProfile || !!store.viewedGroup
+      'mobile-profile-open': store.myProfileOpen || !!store.viewedProfile || !!store.viewedGroup || !!store.viewedChannel
     }"
   >
     <div class="layout">
@@ -45,6 +45,15 @@
         @open-user="store.openUserProfile"
         @updated="onGroupUpdated"
       />
+      <ChannelProfile
+        v-if="store.viewedChannel"
+        class="panel-profile profile-overlay"
+        :channel="store.viewedChannel"
+        @close="store.closeChannelProfile"
+        @open-user="store.openUserProfile"
+        @updated="onChannelUpdated"
+        @deleted="onChannelDeleted"
+      />
     </Teleport>
   </div>
 
@@ -71,6 +80,7 @@ const _savedTheme = localStorage.getItem('messenger-theme') === 'dark' ? 'dark' 
 document.documentElement.dataset.theme = _savedTheme
 import { connectSocket, subscribe } from './services/socket'
 import { listMyGroups, listGroupMembers, sendGroupMessage } from './services/groups'
+import { listMyChannels, listChannelMembers, sendChannelMessage } from './services/channels'
 import {
   resolveChatUsers,
   fetchUserByUuid,
@@ -83,13 +93,16 @@ import {
   isKeyAnnounce,
   tryConsumeKeyAnnounce,
   hasGroupKey,
-  redistributeGroupKey
+  redistributeGroupKey,
+  hasChannelKey,
+  redistributeChannelKey
 } from './services/crypto'
 
 import ChatList from './components/ChatList.vue'
 import UserProfile from './components/UserProfile.vue'
 import PublicUserProfile from './components/PublicUserProfile.vue'
 import GroupProfile from './components/GroupProfile.vue'
+import ChannelProfile from './components/ChannelProfile.vue'
 import ChatWindow from './components/ChatWindow.vue'
 import MiniPlayer from './components/MiniPlayer.vue'
 import RegisterForm from './components/RegisterForm.vue'
@@ -148,7 +161,7 @@ async function checkAuth() {
       initChatSession()
 
       await loadMessageHistory()
-      await Promise.all([loadChatNames(), loadMyProfileAvatar(result), loadGroupChats()])
+      await Promise.all([loadChatNames(), loadMyProfileAvatar(result), loadGroupChats(), loadChannelChats()])
     } else {
       store.setAuthenticated(false)
     }
@@ -209,6 +222,40 @@ function onGroupUpdated(group) {
   if (group) store.ensureGroupChat(group)
 }
 
+function onChannelUpdated(channel) {
+  if (channel) store.ensureChannelChat(channel)
+}
+
+function onChannelDeleted(uuid) {
+  if (!uuid) return
+  const id = `channel:${uuid}`
+  store.chats = store.chats.filter((c) => c.id !== id)
+  if (store.activeChatId === id) store.activeChatId = null
+  store.closeChannelProfile()
+}
+
+
+async function handleChannelMembersChanged(ev) {
+  const uuid = ev?.channel_uuid || ev?.channelUuid
+  if (!uuid) return
+  store.ensureChannelChat({
+    channel_uuid: uuid,
+    title: ev.title,
+    member_count: ev.member_count,
+    e2ee_enabled: ev.e2ee_enabled
+  })
+  if (ev.e2ee_enabled === false) return
+  if (!hasChannelKey(uuid)) return
+  try {
+    const rotate = Array.isArray(ev.removed_user_ids) && ev.removed_user_ids.length > 0
+    const members = await listChannelMembers(uuid)
+    const ids = (members || []).map((m) => Number(m.user_id || m.userId)).filter(Boolean)
+    const wire = await redistributeChannelKey(uuid, ids, store.myUserId, { rotate })
+    await sendChannelMessage(uuid, { text: wire })
+  } catch (e) {
+    console.warn('E2EE channel redistribute after members change:', e)
+  }
+}
 
 async function handleGroupMembersChanged(ev) {
   const uuid = ev?.group_uuid || ev?.groupUuid
@@ -229,6 +276,17 @@ async function handleGroupMembersChanged(ev) {
     await sendGroupMessage(uuid, { text: wire })
   } catch (e) {
     console.warn('E2EE redistribute after members change:', e)
+  }
+}
+
+async function loadChannelChats() {
+  try {
+    const channels = await listMyChannels()
+    for (const ch of channels || []) {
+      store.ensureChannelChat(ch)
+    }
+  } catch (e) {
+    console.warn('Не удалось загрузить каналы:', e)
   }
 }
 
@@ -305,7 +363,7 @@ async function handleLoginSuccess(credentials) {
     store.setAuthenticated(true)
 
     await loadMessageHistory()
-    await Promise.all([loadChatNames(), loadMyProfileAvatar(result), loadGroupChats()])
+    await Promise.all([loadChatNames(), loadMyProfileAvatar(result), loadGroupChats(), loadChannelChats()])
 
     // WS авторизуется cookie access_token
     initChatSession()
@@ -337,7 +395,7 @@ async function handleRegisterSuccess(userData) {
     store.setAuthenticated(true)
 
     await loadMessageHistory()
-    await Promise.all([loadChatNames(), loadMyProfileAvatar(result), loadGroupChats()])
+    await Promise.all([loadChatNames(), loadMyProfileAvatar(result), loadGroupChats(), loadChannelChats()])
 
     // WS авторизуется cookie access_token
     initChatSession()
@@ -349,6 +407,12 @@ async function handleRegisterSuccess(userData) {
 
 function handleEvent(event) {
   // Вас добавили в группу — сразу показать в списке, без релогина
+  if (event.channelAdded) {
+    store.ensureChannelChat(event.channelAdded)
+  }
+  if (event.channelMembersChanged) {
+    handleChannelMembersChanged(event.channelMembersChanged)
+  }
   if (event.groupAdded) {
     store.ensureGroupChat(event.groupAdded)
     return
@@ -393,7 +457,8 @@ function handleEvent(event) {
   if (event.deletedMessageId) store.deleteMessage(event.deletedMessageId)
   if (event.typing) {
     const gid = event.typing.groupId || event.typing.group_id || null
-    store.setTyping(event.typing.senderId, event.typing.typing, gid)
+    const cid = event.typing.channelId || event.typing.channel_id || null
+    store.setTyping(event.typing.senderId, event.typing.typing, gid, cid)
     // подтянуть имя, если печатает в группе и мы его ещё не знаем
     if (gid && event.typing.senderId && !store.usersById[event.typing.senderId]) {
       loadChatNames()

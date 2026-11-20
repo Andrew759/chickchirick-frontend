@@ -728,3 +728,59 @@ export async function redistributeGroupKey(groupUuid, memberUserIds, myUserId, {
   }
   return buildGroupKeyDistributionMessage(uuid, memberUserIds, myUserId)
 }
+
+
+// ─── Channel E2EE (тот же GroupKey-механизм; uuid канала как идентификатор ключа) ─
+
+export function getChannelKey(channelUuid) {
+  return getGroupKey(channelUuid)
+}
+
+export function hasChannelKey(channelUuid) {
+  return hasGroupKey(channelUuid)
+}
+
+export function storeChannelKey(channelUuid, keyB64, epoch = 1) {
+  return storeGroupKey(channelUuid, keyB64, epoch)
+}
+
+export async function createChannelKey(channelUuid) {
+  return createGroupKey(channelUuid)
+}
+
+export async function rotateChannelKey(channelUuid) {
+  return rotateGroupKey(channelUuid)
+}
+
+export async function encryptForChannel(channelUuid, plainText) {
+  return encryptForGroup(channelUuid, plainText)
+}
+
+export async function decryptFromChannel(channelUuid, text) {
+  return decryptFromGroup(channelUuid, text)
+}
+
+export function isChannelEncryptedText(text) {
+  return isGroupEncryptedText(text)
+}
+
+export function isChannelKeyMessage(text) {
+  return isGroupKeyMessage(text)
+}
+
+export async function buildChannelKeyDistributionMessage(channelUuid, memberUserIds, myUserId) {
+  // packages несут groupUuid поле — для канала туда пишем channel uuid (consumeGroupKeyMessage)
+  return buildGroupKeyDistributionMessage(channelUuid, memberUserIds, myUserId)
+}
+
+export async function consumeChannelKeyMessage(senderId, text, myUserId) {
+  return consumeGroupKeyMessage(senderId, text, myUserId)
+}
+
+export async function resolveChannelE2eeDisplayText(channelUuid, rawText, senderId, myUserId) {
+  return resolveGroupE2eeDisplayText(channelUuid, rawText, senderId, myUserId)
+}
+
+export async function redistributeChannelKey(channelUuid, memberUserIds, myUserId, opts = {}) {
+  return redistributeGroupKey(channelUuid, memberUserIds, myUserId, opts)
+}

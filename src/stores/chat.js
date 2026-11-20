@@ -10,10 +10,14 @@ import {
   resolveE2eeDisplayText,
   isGroupKeyMessage,
   isGroupEncryptedText,
+  isChannelKeyMessage,
+  isChannelEncryptedText,
+  resolveChannelE2eeDisplayText,
   resolveGroupE2eeDisplayText,
   consumeGroupKeyMessage
 } from '../services/crypto'
 import { getGroup } from '../services/groups'
+import { getChannel } from '../services/channels'
 
 /**
  * Приводим createdAt к ISO-строке.
@@ -211,6 +215,7 @@ export const useChatStore = defineStore('chat', {
     viewedProfile: null,
     /** Открытая панель свойств группы */
     viewedGroup: null,
+    viewedChannel: null,
     /** ids сообщений, которые сейчас обрабатывает upsert (антигонка) */
     pendingMessageIds: {},
     /** messages-local user id -> whether the peer is currently typing */
@@ -240,6 +245,7 @@ export const useChatStore = defineStore('chat', {
       this.myProfile = null
       this.viewedProfile = null
       this.viewedGroup = null
+      this.viewedChannel = null
       this.typingByChatId = {}
       typingTimers.forEach((timer) => clearTimeout(timer))
       typingTimers.clear()
@@ -252,6 +258,7 @@ export const useChatStore = defineStore('chat', {
     async openMyProfile() {
       this.viewedProfile = null
       this.viewedGroup = null
+      this.viewedChannel = null
       this.currentView = 'chats'
       await nextTick()
       this.myProfileOpen = true
@@ -265,6 +272,7 @@ export const useChatStore = defineStore('chat', {
       if (!user || !user.id) return
       this.myProfileOpen = false
       this.viewedGroup = null
+      this.viewedChannel = null
       this.currentView = 'chats'
       await nextTick()
       this.viewedProfile = { ...user }
@@ -285,6 +293,7 @@ export const useChatStore = defineStore('chat', {
       }
       this.myProfileOpen = false
       this.viewedProfile = null
+      this.viewedChannel = null
       this.currentView = 'chats'
       await nextTick()
       this.viewedGroup = {
@@ -298,6 +307,37 @@ export const useChatStore = defineStore('chat', {
 
     closeGroupProfile() {
       this.viewedGroup = null
+    },
+
+    async openChannelProfile(channel) {
+      let uuid = channel?.channel_uuid || channel?.channelUuid || channel?.channelId || null
+      if (uuid && String(uuid).startsWith('channel:')) {
+        uuid = String(uuid).slice(8)
+      }
+      if (!uuid) {
+        console.warn('openChannelProfile: missing uuid', channel)
+        return
+      }
+      this.myProfileOpen = false
+      this.viewedProfile = null
+      this.viewedGroup = null
+      this.currentView = 'chats'
+      await nextTick()
+      this.viewedChannel = {
+        channel_uuid: String(uuid),
+        title: channel?.title || channel?.name || 'Канал',
+        description: channel?.description || '',
+        avatar_file_uuid: channel?.avatar_file_uuid || channel?.avatarFileUuid || null,
+        member_count: channel?.member_count || channel?.memberCount || 0,
+        created_by: channel?.created_by || channel?.createdBy || null,
+        is_public: channel?.is_public ?? channel?.isPublic ?? false,
+        e2ee_enabled: channel?.e2ee_enabled ?? channel?.e2eeEnabled ?? true,
+        my_role: channel?.my_role || channel?.myRole || ''
+      }
+    },
+
+    closeChannelProfile() {
+      this.viewedChannel = null
     },
 
     async setHistory(history) {
@@ -323,14 +363,32 @@ export const useChatStore = defineStore('chat', {
         const recipientId = Number(message.recipientId)
         const isMine = senderId === this.myUserId
         const groupId = message.groupId || message.group_id || null
-        const chatId = groupId ? `group:${groupId}` : (isMine ? recipientId : senderId)
+        const channelId = message.channelId || message.channel_id || null
+        const chatId = channelId
+          ? `channel:${channelId}`
+          : (groupId ? `group:${groupId}` : (isMine ? recipientId : senderId))
         if (!chatId) continue
 
-        const rawText = message.text ?? message.Text ?? ''
-        if (!groupId && isKeyAnnounce(rawText)) continue
+        let rawText = message.text ?? message.Text ?? ''
+        if (!groupId && !channelId && isKeyAnnounce(rawText)) continue
 
         if (!chatMap.has(chatId)) {
-          if (groupId) {
+          if (channelId) {
+            const prev = this.chats.find((c) => c.id === chatId)
+            chatMap.set(chatId, {
+              id: chatId,
+              channelId,
+              type: 'channel',
+              isChannel: true,
+              is_channel: true,
+              name: prev?.name && prev.name !== 'Канал' ? prev.name : (prev?.name || 'Канал'),
+              avatarFileUuid: prev?.avatarFileUuid || null,
+              memberCount: prev?.memberCount || 0,
+              myRole: prev?.myRole || '',
+              e2eeEnabled: prev?.e2eeEnabled ?? true,
+              messages: []
+            })
+          } else if (groupId) {
             // сохраняем title/avatar, если уже были в state (или подтянутся loadGroupChats)
             const prev = this.chats.find((c) => c.id === chatId)
             chatMap.set(chatId, {
@@ -357,17 +415,23 @@ export const useChatStore = defineStore('chat', {
 
         let extra = normalizeMessageFields(message)
         // control: раздача group key — съесть и не показывать
-        if (groupId && isGroupKeyMessage(rawText)) {
+        if ((groupId || channelId) && isGroupKeyMessage(rawText)) {
           try {
             await consumeGroupKeyMessage(senderId, rawText, this.myUserId)
           } catch (e) {
-            console.warn('group key in history:', e)
+            console.warn('group/channel key in history:', e)
           }
           continue
         }
 
         const encrypted = isEncryptedText(rawText) || isGroupEncryptedText(rawText)
-        if (groupId && (isGroupEncryptedText(rawText) || isEncryptedText(rawText))) {
+        if (channelId && (isGroupEncryptedText(rawText) || isEncryptedText(rawText))) {
+          try {
+            const plain = await resolveChannelE2eeDisplayText(channelId, rawText, senderId, this.myUserId)
+            if (plain === '' && isGroupKeyMessage(rawText)) continue
+            extra = { ...extra, ...normalizeMessageFields({ ...message, text: plain }) }
+          } catch (_) {}
+        } else if (groupId && (isGroupEncryptedText(rawText) || isEncryptedText(rawText))) {
           try {
             const plain = await resolveGroupE2eeDisplayText(groupId, rawText, senderId, this.myUserId)
             if (plain === '' && isGroupKeyMessage(rawText)) continue
@@ -376,7 +440,7 @@ export const useChatStore = defineStore('chat', {
             console.warn('decrypt group in setHistory:', e)
             extra = { ...extra, text: 'Зашифрованное сообщение' }
           }
-        } else if (!groupId && (encrypted || (typeof rawText === 'string' && /^e2ee:v\d+:/i.test(rawText.trim())))) {
+        } else if (!groupId && !channelId && (encrypted || (typeof rawText === 'string' && /^e2ee:v\d+:/i.test(rawText.trim())))) {
           const peerId = isMine ? recipientId : senderId
           try {
             const plain = await resolveE2eeDisplayText(peerId, rawText)
@@ -404,6 +468,7 @@ export const useChatStore = defineStore('chat', {
           senderId,
           recipientId,
           groupId: groupId || undefined,
+          channelId: channelId || undefined,
           createdAt: normalizeCreatedAt(message.createdAt)
         })
       }
@@ -412,7 +477,7 @@ export const useChatStore = defineStore('chat', {
 
       // группы без сообщений в history, но уже известные в state — не теряем
       for (const prev of this.chats) {
-        if (!prev?.isGroup && !String(prev?.id || '').startsWith('group:')) continue
+        if (!prev?.isGroup && !prev?.isChannel && !String(prev?.id || '').startsWith('group:') && !String(prev?.id || '').startsWith('channel:')) continue
         if (chatMap.has(prev.id)) continue
         nextChats.push({
           ...prev,
@@ -452,7 +517,10 @@ export const useChatStore = defineStore('chat', {
       const recipientId = Number(msg.recipientId)
       const isMine = senderId === this.myUserId
       const groupId = msg.groupId || msg.group_id || null
-      const chatId = groupId
+      const channelId = msg.channelId || msg.channel_id || null
+      const chatId = channelId
+        ? `channel:${channelId}`
+        : groupId
         ? `group:${groupId}`
         : (isMine ? recipientId : senderId)
 
@@ -460,7 +528,7 @@ export const useChatStore = defineStore('chat', {
 
       const rawText = msg.text ?? msg.Text ?? ''
 
-      if (!groupId && isKeyAnnounce(rawText)) {
+      if (!groupId && !channelId && isKeyAnnounce(rawText)) {
         if (!isMine) {
           tryConsumeKeyAnnounce(senderId, rawText)
         }
@@ -470,7 +538,23 @@ export const useChatStore = defineStore('chat', {
       let chat = this.chats.find((c) => c.id === chatId)
 
       if (!chat) {
-        if (groupId) {
+        if (channelId) {
+          chat = {
+            id: chatId,
+            channelId,
+            type: 'channel',
+            isChannel: true,
+            is_channel: true,
+            name: 'Канал',
+            messages: []
+          }
+          this.chats.push(chat)
+          getChannel(channelId)
+            .then((ch) => {
+              if (ch) this.ensureChannelChat(ch)
+            })
+            .catch(() => {})
+        } else if (groupId) {
           chat = {
             id: chatId,
             groupId,
@@ -480,7 +564,6 @@ export const useChatStore = defineStore('chat', {
             messages: []
           }
           this.chats.push(chat)
-          // подтянуть title/avatar, чтобы чат сразу выглядел нормально
           getGroup(groupId)
             .then((g) => {
               if (g) this.ensureGroupChat(g)
@@ -506,12 +589,12 @@ export const useChatStore = defineStore('chat', {
       }
 
       try {
-        // control: group key distribution
-        if (groupId && isGroupKeyMessage(rawText)) {
+        // control: group/channel key distribution
+        if ((groupId || channelId) && isGroupKeyMessage(rawText)) {
           try {
             await consumeGroupKeyMessage(senderId, rawText, this.myUserId)
           } catch (e) {
-            console.warn('group key in upsert:', e)
+            console.warn('group/channel key in upsert:', e)
           }
           return
         }
@@ -522,7 +605,16 @@ export const useChatStore = defineStore('chat', {
           isGroupEncryptedText(rawText) ||
           (typeof rawText === 'string' && /^e2ee:v\d+:/i.test(rawText.trim()))
 
-        if (groupId && (isGroupEncryptedText(rawText) || isEncryptedText(rawText))) {
+        if (channelId && (isGroupEncryptedText(rawText) || isEncryptedText(rawText))) {
+          try {
+            const plain = await resolveChannelE2eeDisplayText(channelId, rawText, senderId, this.myUserId)
+            if (plain === '' && isGroupKeyMessage(rawText)) return
+            extra = normalizeMessageFields({ text: plain })
+          } catch (e) {
+            console.warn('decrypt channel in upsert:', e)
+            extra = { ...extra, text: 'Зашифрованное сообщение' }
+          }
+        } else if (groupId && (isGroupEncryptedText(rawText) || isEncryptedText(rawText))) {
           try {
             const plain = await resolveGroupE2eeDisplayText(groupId, rawText, senderId, this.myUserId)
             if (plain === '' && isGroupKeyMessage(rawText)) return
@@ -531,7 +623,7 @@ export const useChatStore = defineStore('chat', {
             console.warn('decrypt group in upsert:', e)
             extra = { ...extra, text: 'Зашифрованное сообщение' }
           }
-        } else if (!groupId && encrypted) {
+        } else if (!groupId && !channelId && encrypted) {
           const peerId = isMine ? recipientId : senderId
           try {
             const plain = await resolveE2eeDisplayText(peerId, rawText)
@@ -545,13 +637,14 @@ export const useChatStore = defineStore('chat', {
         // повторная проверка после await (гонка двух WS-кадров)
         if (mid != null && chat.messages.some((m) => Number(m.id) === mid)) return
 
-        // мягкий дедуп без id: тот же sender+text+group за 3с
+        // мягкий дедуп без id
         if (mid == null || Number.isNaN(mid)) {
           const createdAt = normalizeCreatedAt(msg.createdAt)
           const dup = chat.messages.some((m) => {
             if (Number(m.senderId) !== senderId) return false
             if ((m.text || '') !== (extra.text || '')) return false
             if ((m.groupId || null) !== (groupId || null)) return false
+            if ((m.channelId || null) !== (channelId || null)) return false
             const t1 = new Date(m.createdAt || 0).getTime()
             const t2 = new Date(createdAt || 0).getTime()
             return Math.abs(t1 - t2) < 3000
@@ -576,6 +669,7 @@ export const useChatStore = defineStore('chat', {
           senderId,
           recipientId,
           groupId: groupId || undefined,
+          channelId: channelId || undefined,
           createdAt: normalizeCreatedAt(msg.createdAt)
         })
 
@@ -632,7 +726,7 @@ export const useChatStore = defineStore('chat', {
         return
       }
       // group chats use string ids like "group:<uuid>"
-      if (typeof id === 'string' && id.startsWith('group:')) {
+      if (typeof id === 'string' && (id.startsWith('group:') || id.startsWith('channel:'))) {
         if (id === this.activeChatId) return
         this.activeChatId = id
         return
@@ -643,15 +737,17 @@ export const useChatStore = defineStore('chat', {
       this.activeChatId = next
     },
 
-    setTyping(userId, active, groupId = null) {
+    setTyping(userId, active, groupId = null, channelId = null) {
       const sid = Number(userId)
       if (!sid || sid === Number(this.myUserId)) return
 
-      // group: chat key = "group:<uuid>"; direct: chat key = peer user id
-      const chatKey = groupId ? `group:${groupId}` : sid
-      const timerKey = groupId ? `${chatKey}:${sid}` : String(sid)
+      // group/channel: string key; direct: peer user id
+      const chatKey = channelId
+        ? `channel:${channelId}`
+        : (groupId ? `group:${groupId}` : sid)
+      const timerKey = (groupId || channelId) ? `${chatKey}:${sid}` : String(sid)
 
-      if (groupId) {
+      if (groupId || channelId) {
         const cur = this.typingByChatId[chatKey]
         const map = cur && typeof cur === 'object' ? { ...cur } : {}
         if (active) map[sid] = true
@@ -674,7 +770,7 @@ export const useChatStore = defineStore('chat', {
 
       if (active) {
         const timer = setTimeout(() => {
-          if (groupId) {
+          if (groupId || channelId) {
             const cur = this.typingByChatId[chatKey]
             if (cur && typeof cur === 'object') {
               const map = { ...cur }
@@ -762,6 +858,67 @@ export const useChatStore = defineStore('chat', {
 
     openGroupChat(group) {
       const chat = this.ensureGroupChat(group)
+      if (!chat) return
+      this.activeChatId = chat.id
+      this.currentView = 'chats'
+    },
+
+    /**
+     * @param {{ channel_uuid?: string, channelUuid?: string, channelId?: string, title?: string, description?: string, avatar_file_uuid?: string, is_public?: boolean, e2ee_enabled?: boolean, member_count?: number, created_by?: number, my_role?: string }} channel
+     */
+    ensureChannelChat(channel) {
+      const uuid = channel?.channel_uuid || channel?.channelUuid || channel?.channelId
+      if (!uuid) return null
+      const id = `channel:${uuid}`
+      let chat = this.chats.find((c) => c.id === id)
+      if (!chat) {
+        chat = {
+          id,
+          channelId: uuid,
+          type: 'channel',
+          isChannel: true,
+          is_channel: true,
+          name: channel.title || 'Канал',
+          description: channel.description || '',
+          avatarFileUuid: channel.avatar_file_uuid || channel.avatarFileUuid || null,
+          memberCount: channel.member_count || channel.memberCount || 0,
+          createdBy: channel.created_by || channel.createdBy || null,
+          isPublic: channel.is_public ?? channel.isPublic ?? false,
+          e2eeEnabled: channel.e2ee_enabled ?? channel.e2eeEnabled ?? true,
+          myRole: channel.my_role || channel.myRole || '',
+          messages: [],
+          lastActivityAt: new Date().toISOString()
+        }
+        this.chats.push(chat)
+      } else {
+        if (channel.title) chat.name = channel.title
+        if (channel.description != null) chat.description = channel.description
+        if (channel.avatar_file_uuid || channel.avatarFileUuid) {
+          chat.avatarFileUuid = channel.avatar_file_uuid || channel.avatarFileUuid
+        }
+        if (channel.member_count != null || channel.memberCount != null) {
+          chat.memberCount = channel.member_count ?? channel.memberCount
+        }
+        if (channel.created_by != null || channel.createdBy != null) {
+          chat.createdBy = channel.created_by ?? channel.createdBy
+        }
+        if (channel.my_role || channel.myRole) {
+          chat.myRole = channel.my_role || channel.myRole
+        }
+        if (channel.is_public != null || channel.isPublic != null) {
+          chat.isPublic = channel.is_public ?? channel.isPublic
+        }
+        if (channel.e2ee_enabled != null || channel.e2eeEnabled != null) {
+          chat.e2eeEnabled = channel.e2ee_enabled ?? channel.e2eeEnabled
+        }
+        chat.lastActivityAt = new Date().toISOString()
+      }
+      sortChatsByLastMessage(this.chats)
+      return chat
+    },
+
+    openChannelChat(channel) {
+      const chat = this.ensureChannelChat(channel)
       if (!chat) return
       this.activeChatId = chat.id
       this.currentView = 'chats'

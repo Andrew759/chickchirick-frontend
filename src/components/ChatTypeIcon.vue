@@ -14,7 +14,7 @@ import { computed } from 'vue'
 
 const props = defineProps({
   /** direct — личная переписка, group — групповой чат */
-  type: { type: String, default: 'direct', validator: v => ['direct', 'group'].includes(v) },
+  type: { type: String, default: 'direct', validator: v => ['direct', 'group', 'channel'].includes(v) },
   /** Номер SVG-варианта: от 1 до 5 */
   variant: { type: Number, default: 1, validator: v => Number.isInteger(v) && v >= 1 && v <= 5 },
   size: { type: [Number, String], default: 24 },
@@ -22,7 +22,8 @@ const props = defineProps({
 })
 
 const iconStyle = computed(() => {
-  const url = `url("/chat-icons/${props.type}-${props.variant}.svg")`
+  const t = props.type === 'channel' ? 'group' : props.type
+  const url = `url("/chat-icons/${t}-${props.variant}.svg")`
   const dimension = typeof props.size === 'number' ? `${props.size}px` : props.size
   return {
     width: dimension,
@@ -31,7 +32,7 @@ const iconStyle = computed(() => {
     WebkitMaskImage: url
   }
 })
-const accessibleLabel = computed(() => props.label || (props.type === 'group' ? 'Групповой чат' : 'Личный чат'))
+const accessibleLabel = computed(() => props.label || (props.type === 'channel' ? 'Канал' : props.type === 'group' ? 'Групповой чат' : 'Личный чат'))
 </script>
 
 <style scoped>

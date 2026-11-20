@@ -78,6 +78,19 @@
       </button>
     </div>
 
+    <div v-if="chatFilter === 'channel'" class="group-actions">
+      <button
+        type="button"
+        class="btn-create-group btn-create-channel"
+        @click="showCreateChannel = true"
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </svg>
+        <span>Создать канал</span>
+      </button>
+    </div>
+
 
     <!-- Поиск всегда сверху -->
     <div class="search-bar" :class="{ focused: searchFocused || searchQuery }">
@@ -110,6 +123,7 @@
     </div>
 
     <CreateGroupModal v-if="showCreateGroup" @close="showCreateGroup = false" @created="onGroupCreated" />
+    <CreateChannelModal v-if="showCreateChannel" @close="showCreateChannel = false" @created="onChannelCreated" />
     <StickersManager v-if="showStickers" @close="showStickers = false" />
 
     <PhotoViewer
@@ -209,6 +223,7 @@ import AvatarEqualizer from './AvatarEqualizer.vue'
 import StickersManager from './StickersManager.vue'
 import ChatTypeIcon from './ChatTypeIcon.vue'
 import CreateGroupModal from './CreateGroupModal.vue'
+import CreateChannelModal from './CreateChannelModal.vue'
 
 const store = useChatStore()
 
@@ -220,11 +235,14 @@ const chatFilter = ref('direct')
 
 function chatKind(chat) {
   const type = String(chat?.type || chat?.chatType || chat?.chat_type || '').toLowerCase()
+  const id = String(chat?.id || '')
   if (chat?.isChannel === true || chat?.is_channel === true ||
       chat?.channelId != null || chat?.channel_id != null ||
+      id.startsWith('channel:') ||
       ['channel', 'broadcast', 'broadcast_channel'].includes(type)) return 'channel'
   if (chat?.isGroup === true || chat?.is_group === true ||
       chat?.groupId != null || chat?.group_id != null ||
+      id.startsWith('group:') ||
       ['group', 'group_chat', 'supergroup'].includes(type)) return 'group'
   return 'direct'
 }
@@ -235,10 +253,16 @@ const visibleChats = computed(() => chats.value.filter((chat) =>
 
 const showStickers = ref(false)
 const showCreateGroup = ref(false)
+const showCreateChannel = ref(false)
 
 function onGroupCreated(group) {
   store.openGroupChat(group)
   chatFilter.value = 'group'
+}
+
+function onChannelCreated(channel) {
+  store.openChannelChat(channel)
+  chatFilter.value = 'channel'
 }
 
 function openStickers() {
