@@ -3,12 +3,13 @@
     <div
       v-if="open"
       class="ep-overlay"
+      :class="{ 'ep-dark': isDark }"
       role="dialog"
       aria-modal="true"
       aria-label="Выбор реакции"
       @click.self="close"
     >
-      <div class="ep-modal" @click.stop>
+      <div class="ep-modal" :class="{ 'ep-dark': isDark }" @click.stop>
         <div class="ep-header">
           <div class="ep-title">Реакция</div>
           <button type="button" class="ep-close" title="Закрыть" @click="close">×</button>
@@ -62,7 +63,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { QUICK_REACTION_EMOJIS } from '../services/reactions'
 
 const props = defineProps({
@@ -73,6 +74,35 @@ const emit = defineEmits(['close', 'select'])
 const query = ref('')
 const searchRef = ref(null)
 const activeTab = ref('all')
+const isDark = ref(false)
+
+function readTheme() {
+  try {
+    return document.documentElement?.dataset?.theme === 'dark'
+  } catch {
+    return false
+  }
+}
+
+function syncTheme() {
+  isDark.value = readTheme()
+}
+
+let themeObserver = null
+onMounted(() => {
+  syncTheme()
+  try {
+    themeObserver = new MutationObserver(syncTheme)
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    })
+  } catch (_) {}
+})
+onBeforeUnmount(() => {
+  themeObserver?.disconnect?.()
+  themeObserver = null
+})
 
 const tabs = [
   { id: 'all', icon: '✨', label: 'Все' },
@@ -134,6 +164,7 @@ watch(
   () => props.open,
   async (v) => {
     if (v) {
+      syncTheme()
       query.value = ''
       activeTab.value = 'all'
       await nextTick()
@@ -263,21 +294,66 @@ watch(
   padding: 24px 8px;
 }
 
-:global(html[data-theme='dark']) .ep-modal {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* Тёмная тема через класс (Teleport + scoped надёжнее, чем html[data-theme]) */
+.ep-overlay.ep-dark {
+  background: rgba(0, 0, 0, 0.62);
+}
+.ep-modal.ep-dark {
   background: #1a222c;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
-:global(html[data-theme='dark']) .ep-title {
+.ep-modal.ep-dark .ep-title {
   color: #e6edf3;
 }
-:global(html[data-theme='dark']) .ep-search {
+.ep-modal.ep-dark .ep-close {
+  color: #9db0be;
+}
+.ep-modal.ep-dark .ep-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e6edf3;
+}
+.ep-modal.ep-dark .ep-search {
   background: #243140;
-  border-color: rgba(42, 171, 238, 0.3);
+  border-color: rgba(42, 171, 238, 0.35);
   color: #e6edf3;
 }
-:global(html[data-theme='dark']) .ep-tabs {
+.ep-modal.ep-dark .ep-search::placeholder {
+  color: #7a90a0;
+}
+.ep-modal.ep-dark .ep-search:focus {
+  background: #2a3a4a;
+  border-color: #2aabee;
+}
+.ep-modal.ep-dark .ep-tabs {
   border-bottom-color: rgba(255, 255, 255, 0.08);
 }
-:global(html[data-theme='dark']) .ep-tab.active {
+.ep-modal.ep-dark .ep-tab:hover {
+  background: rgba(42, 171, 238, 0.12);
+}
+.ep-modal.ep-dark .ep-tab.active {
   background: rgba(42, 171, 238, 0.22);
 }
+.ep-modal.ep-dark .ep-emoji:hover {
+  background: rgba(42, 171, 238, 0.18);
+}
+.ep-modal.ep-dark .ep-empty {
+  color: #91a4b4;
+}
+
 </style>

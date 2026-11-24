@@ -150,21 +150,24 @@
           ×
         </button>
       </div>
-      <div v-if="reactionChips.length" class="msg-reactions" @click.stop>
-        <button
-          v-for="r in reactionChips"
-          :key="r.emoji"
-          type="button"
-          class="msg-reaction-chip"
-          :class="{ me: r.me }"
-          :title="r.emoji"
-          @click.stop="$emit('react', msg, r.emoji)"
-        >
-          <span class="msg-reaction-emoji">{{ r.emoji }}</span>
-          <span v-if="r.count > 1" class="msg-reaction-count">{{ r.count }}</span>
-        </button>
+      <div class="msg-footer">
+        <div v-if="reactionChips.length" class="msg-reactions" @click.stop>
+          <button
+            v-for="r in reactionChips"
+            :key="r.emoji"
+            type="button"
+            class="msg-reaction-chip"
+            :class="{ me: r.me }"
+            :title="r.emoji"
+            @click.stop="$emit('react', msg, r.emoji)"
+          >
+            <span class="msg-reaction-emoji">{{ r.emoji }}</span>
+            <span v-if="r.count > 1" class="msg-reaction-count">{{ r.count }}</span>
+          </button>
+        </div>
+        <div v-else class="msg-reactions-spacer" aria-hidden="true" />
+        <div class="time">{{ timeLabel }}</div>
       </div>
-      <div class="time">{{ timeLabel }}</div>
 
       <!-- Мини-меню: реакции + ответ -->
       <div
@@ -829,12 +832,34 @@ const displayText = computed(() => {
   background: #174968 !important;
 }
 
+.msg-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  min-height: 18px;
+  width: 100%;
+}
 .msg-reactions {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 6px;
-  max-width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  flex: 1;
+}
+.msg-reactions-spacer {
+  flex: 1;
+  min-width: 0;
+}
+.msg-footer .time {
+  margin-top: 0;
+  flex-shrink: 0;
+  align-self: flex-end;
+  line-height: 1.2;
+  text-align: right;
 }
 .msg-reaction-chip {
   display: inline-flex;
