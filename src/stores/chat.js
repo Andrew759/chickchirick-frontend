@@ -218,6 +218,8 @@ export const useChatStore = defineStore('chat', {
     viewedChannel: null,
     /** ids сообщений, которые сейчас обрабатывает upsert (антигонка) */
     pendingMessageIds: {},
+    /** Очередь ответов, пока WS не прислал respondMessageId: [{respondMessageId, rawText, chatKey, at}] */
+    pendingOutgoingReplies: [],
     /** messages-local user id -> whether the peer is currently typing */
     typingByChatId: {}
   }),
@@ -469,6 +471,11 @@ export const useChatStore = defineStore('chat', {
           recipientId,
           groupId: groupId || undefined,
           channelId: channelId || undefined,
+          respondMessageId:
+            message.respondMessageId ??
+            message.respond_message_id ??
+            message.RespondMessageID ??
+            null,
           createdAt: normalizeCreatedAt(message.createdAt)
         })
       }
@@ -510,6 +517,43 @@ export const useChatStore = defineStore('chat', {
       ) {
         this.activeChatId = null
       }
+    },
+
+    noteOutgoingReply({ respondMessageId, rawText, chatKey }) {
+      const rid = respondMessageId != null ? Number(respondMessageId) : NaN
+      if (Number.isNaN(rid) || rid <= 0) return
+      this.pendingOutgoingReplies.push({
+        respondMessageId: rid,
+        rawText: rawText != null ? String(rawText) : '',
+        chatKey: chatKey != null ? String(chatKey) : '',
+        at: Date.now()
+      })
+      // не копим бесконечно
+      const cutoff = Date.now() - 60000
+      this.pendingOutgoingReplies = this.pendingOutgoingReplies.filter((p) => p.at >= cutoff).slice(-30)
+    },
+
+    consumeOutgoingReply({ rawText, chatKey }) {
+      const key = chatKey != null ? String(chatKey) : ''
+      const raw = rawText != null ? String(rawText) : ''
+      const now = Date.now()
+      // сначала точное совпадение текста в том же чате
+      let idx = this.pendingOutgoingReplies.findIndex(
+        (p) => p.chatKey === key && p.rawText === raw && now - p.at < 60000
+      )
+      // fallback: тот же чат, самый свежий
+      if (idx < 0) {
+        for (let i = this.pendingOutgoingReplies.length - 1; i >= 0; i--) {
+          const p = this.pendingOutgoingReplies[i]
+          if (p.chatKey === key && now - p.at < 60000) {
+            idx = i
+            break
+          }
+        }
+      }
+      if (idx < 0) return null
+      const [p] = this.pendingOutgoingReplies.splice(idx, 1)
+      return p.respondMessageId
     },
 
     async upsertMessage(msg) {
@@ -583,7 +627,19 @@ export const useChatStore = defineStore('chat', {
 
       const mid = msg.id != null ? Number(msg.id) : null
       if (mid != null && !Number.isNaN(mid)) {
-        if (chat.messages.some((m) => Number(m.id) === mid)) return
+        const existing = chat.messages.find((m) => Number(m.id) === mid)
+        if (existing) {
+          const incomingRid =
+            msg.respondMessageId ?? msg.respond_message_id ?? msg.RespondMessageID ?? null
+          if (
+            (existing.respondMessageId == null || existing.respondMessageId === '') &&
+            incomingRid != null &&
+            incomingRid !== ''
+          ) {
+            existing.respondMessageId = Number(incomingRid) || incomingRid
+          }
+          return
+        }
         if (this.pendingMessageIds[mid]) return
         this.pendingMessageIds[mid] = true
       }
@@ -670,6 +726,20 @@ export const useChatStore = defineStore('chat', {
           recipientId,
           groupId: groupId || undefined,
           channelId: channelId || undefined,
+          respondMessageId: (() => {
+            let rid =
+              msg.respondMessageId ??
+              msg.respond_message_id ??
+              msg.RespondMessageID ??
+              null
+            if ((rid == null || rid === '') && isMine) {
+              rid = this.consumeOutgoingReply({
+                rawText: rawText,
+                chatKey: channelId || groupId || chatId
+              })
+            }
+            return rid != null && rid !== '' ? rid : null
+          })(),
           createdAt: normalizeCreatedAt(msg.createdAt)
         })
 
@@ -714,15 +784,8 @@ export const useChatStore = defineStore('chat', {
     },
 
     deleteMessage(id) {
-      const nid = id != null ? Number(id) : NaN
-      const sid = id != null ? String(id) : ''
-      this.chats.forEach((chat) => {
-        chat.messages = (chat.messages || []).filter((m) => {
-          if (m?.id == null) return true
-          if (!Number.isNaN(nid) && Number(m.id) === nid) return false
-          if (String(m.id) === sid) return false
-          return true
-        })
+      this.chats.forEach(chat => {
+        chat.messages = chat.messages.filter(m => m.id !== id)
       })
       sortChatsByLastMessage(this.chats)
     },

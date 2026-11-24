@@ -46,6 +46,18 @@
 
       <div class="bubble-row">
         <div class="content">
+          <button
+            v-if="replyPreview"
+            type="button"
+            class="reply-quote"
+            @click.stop="$emit('scroll-to', replyPreview.id)"
+          >
+            <span class="reply-quote-bar" aria-hidden="true" />
+            <span class="reply-quote-body">
+              <span class="reply-quote-name">{{ replyPreview.name }}</span>
+              <span class="reply-quote-text">{{ replyPreview.snippet }}</span>
+            </span>
+          </button>
           <div v-if="msg.fileUuid" class="attachment">
             <button
               v-if="isSticker"
@@ -124,6 +136,13 @@
           <div v-if="showText" class="text">{{ displayText }}</div>
         </div>
         <button
+          v-if="canReply"
+          type="button"
+          class="btn-reply"
+          title="Ответить"
+          @click.stop="$emit('reply', msg)"
+        >↩</button>
+        <button
           v-if="msg.fromMe"
           type="button"
           class="btn-delete"
@@ -158,12 +177,55 @@ const props = defineProps({
   /** Групповой чат — показывать аватар и имя */
   isGroup: { type: Boolean, default: false },
   /** Предыдущее сообщение в ленте (для склейки от одного автора) */
-  prevMsg: { type: Object, default: null }
+  prevMsg: { type: Object, default: null },
+  /** Сообщения текущего чата — для превью ответа */
+  chatMessages: { type: Array, default: () => [] },
+  /** Можно ли отвечать (false для подписчиков канала) */
+  canReply: { type: Boolean, default: true }
 })
 
-const emit = defineEmits(['open-photo', 'open-video', 'open-sticker', 'delete', 'open-sender'])
+const emit = defineEmits(['open-photo', 'open-video', 'open-sticker', 'delete', 'open-sender', 'reply', 'scroll-to'])
 
 const store = useChatStore()
+
+function messageSnippet(m) {
+  if (!m) return 'Сообщение'
+  if (m.isSticker) return m.text?.trim() || 'Стикер'
+  if (m.isVoiceMessage) return 'Голосовое сообщение'
+  if (m.isVideoNote) return 'Видеосообщение'
+  if (m.isImage) return 'Фото'
+  if (m.isVideo) return 'Видео'
+  if (m.isAudio) return 'Аудио'
+  if (m.fileUuid && !m.text) return m.fileName || 'Файл'
+  const t = (m.text || '').trim()
+  if (!t) return 'Сообщение'
+  return t.length > 120 ? t.slice(0, 117) + '…' : t
+}
+
+function senderLabel(m) {
+  if (!m) return ''
+  if (m.fromMe) return 'Вы'
+  const u = store.usersById[Number(m.senderId)]
+  if (u) {
+    const n = [u.name, u.surname].filter(Boolean).join(' ').trim()
+    if (n) return n
+    if (u.login) return u.login
+  }
+  return m.senderId ? `User ${m.senderId}` : 'Сообщение'
+}
+
+const replyPreview = computed(() => {
+  const rid = props.msg?.respondMessageId ?? props.msg?.respond_message_id
+  if (rid == null || rid === '') return null
+  const idNum = Number(rid)
+  const list = props.chatMessages || []
+  const found = list.find((m) => Number(m.id) === idNum || String(m.id) === String(rid))
+  return {
+    id: found?.id ?? rid,
+    name: senderLabel(found) || 'Сообщение',
+    snippet: messageSnippet(found)
+  }
+})
 
 const fileUrl = computed(() => getFileUrl(props.msg.fileUuid))
 const timeLabel = computed(() => formatMessageTime(props.msg.createdAt) || '·')
@@ -426,18 +488,57 @@ const displayText = computed(() => {
   margin-top: 2px;
 }
 
+.reply-quote {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  width: 100%;
+  margin: 0 0 6px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(22, 141, 204, 0.1);
+  cursor: pointer;
+  text-align: left;
+}
+.reply-quote-bar {
+  width: 3px;
+  border-radius: 2px;
+  background: #2aabee;
+  flex-shrink: 0;
+}
+.reply-quote-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.reply-quote-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #168dcc;
+}
+.reply-quote-text {
+  font-size: 12.5px;
+  color: #5a7383;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.btn-reply,
 .btn-delete {
   opacity: 0;
   border: none;
   background: transparent;
   cursor: pointer;
   color: #8aa1ae;
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1;
   padding: 0 2px;
   flex-shrink: 0;
 }
-
+.bubble:hover .btn-reply,
+.bubble:focus-within .btn-reply,
 .bubble:hover .btn-delete,
 .bubble:focus-within .btn-delete {
   opacity: 1;
@@ -501,7 +602,8 @@ const displayText = computed(() => {
   .msg-video-preview {
     max-width: min(100%, 280px);
   }
-  .bubble.me .btn-delete {
+  .bubble.me .btn-delete,
+  .bubble .btn-reply {
     opacity: 0.55;
   }
   .sender-avatar,
@@ -515,6 +617,12 @@ const displayText = computed(() => {
 }
 
 /* Dark theme */
+:global(html[data-theme="dark"]) .reply-quote {
+  background: rgba(42, 171, 238, 0.12);
+}
+:global(html[data-theme="dark"]) .reply-quote-text {
+  color: #9db0be;
+}
 :global(html[data-theme="dark"]) .text {
   color: #e6edf3;
 }

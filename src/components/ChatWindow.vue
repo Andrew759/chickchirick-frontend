@@ -40,16 +40,21 @@
         :queue="voiceQueue"
         :is-group="isGroupChat"
         :prev-msg="idx > 0 ? chat.messages[idx - 1] : null"
+        :chat-messages="chat.messages"
+        :data-msg-id="msg.id"
         @open-photo="openPhoto"
         @open-video="openVideo"
         @open-sticker="openSticker"
         @delete="handleDelete"
         @open-sender="onOpenSender"
+        :can-reply="canReplyToMessages"
+        @reply="handleReply"
+        @scroll-to="scrollToMessage"
       />
     </div>
 
     <div v-if="isChannelChat && !canPostToChannel" class="channel-ro-hint"></div>
-      <MessageInput v-if="canPostToChannel" @send="handleSend" @typing="handleTyping" />
+      <MessageInput v-if="canPostToChannel" :reply-to="replyTo" @send="handleSend" @typing="handleTyping" @clear-reply="clearReply" />
 
     <PhotoViewer
       :open="viewerOpen"
@@ -71,8 +76,8 @@
 import { computed, ref, watch, nextTick } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { sendMessage, sendTyping, requestDeleteMessage } from '../services/socket'
-import { isGroupChatId, parseGroupUuid, sendGroupMessage, listGroupMembers, sendGroupTyping, deleteGroupMessage } from '../services/groups'
-import { isChannelChatId, parseChannelUuid, sendChannelMessage, listChannelMembers, sendChannelTyping, deleteChannelMessage } from '../services/channels'
+import { isGroupChatId, parseGroupUuid, sendGroupMessage, listGroupMembers, sendGroupTyping } from '../services/groups'
+import { isChannelChatId, parseChannelUuid, sendChannelMessage, listChannelMembers, sendChannelTyping } from '../services/channels'
 import { resolveChatUsers } from '../services/users'
 import { uploadFile, linkFileToMessage, getFileUrl } from '../services/files'
 import { buildFileMessageText } from '../services/fileMarker'
@@ -106,6 +111,10 @@ const canPostToChannel = computed(() => {
   const role = chat.value?.myRole || chat.value?.my_role || ''
   return role === 'owner' || role === 'admin'
 })
+
+/** Отвечать можно там, где можно писать (в канале — только owner/admin) */
+const canReplyToMessages = computed(() => canPostToChannel.value)
+
 
 /** Подтянуть имена/аватары отправителей групповых сообщений */
 async function loadGroupSenders() {
@@ -225,6 +234,7 @@ const headerSubtitle = computed(() => {
 
 const emit = defineEmits(['open-profile', 'open-group-profile', 'back'])
 const messagesEl = ref(null)
+const replyTo = ref(null)
 
 const viewerOpen = ref(false)
 const viewerIndex = ref(0)
@@ -424,10 +434,40 @@ function stickerFileName(sticker) {
   return `sticker-${slug}.webp`
 }
 
+function handleReply(msg) {
+  if (!canReplyToMessages.value) return
+  if (!msg?.id) return
+  let name = ''
+  if (msg.fromMe) name = 'Вы'
+  else {
+    const u = store.usersById[Number(msg.senderId)]
+    if (u) {
+      name = [u.name, u.surname].filter(Boolean).join(' ').trim() || u.login || ''
+    }
+    if (!name) name = msg.senderId ? `User ${msg.senderId}` : 'Сообщение'
+  }
+  replyTo.value = { ...msg, _replyName: name }
+}
+
+function clearReply() {
+  replyTo.value = null
+}
+
+function scrollToMessage(id) {
+  if (id == null || !messagesEl.value) return
+  const el = messagesEl.value.querySelector(`[data-msg-id="${id}"]`)
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('msg-highlight')
+    setTimeout(() => el.classList.remove('msg-highlight'), 1200)
+  }
+}
+
 async function handleSend(payload) {
   const caption = (payload?.text || '').trim()
   const file = payload?.file || null
   const sticker = payload?.sticker || null
+  const respondMessageId = payload?.respondMessageId ?? replyTo.value?.id ?? null
   const recipientId = chat.value?.id
   if (!recipientId) return
   if (!caption && !file && !sticker) return
@@ -451,15 +491,39 @@ async function handleSend(payload) {
   }
 
   async function deliver(text) {
+    const respond =
+      respondMessageId != null && respondMessageId !== ''
+        ? Number(respondMessageId)
+        : null
+    const respondPayload =
+      respond != null && !Number.isNaN(respond) ? respond : undefined
+    const chatKey = channelUuid || groupUuid || recipientId
+    if (respondPayload != null) {
+      store.noteOutgoingReply({
+        respondMessageId: respondPayload,
+        rawText: text,
+        chatKey
+      })
+    }
     if (isChannel) {
-      await sendChannelMessage(channelUuid, { text })
+      await sendChannelMessage(channelUuid, {
+        text,
+        ...(respondPayload != null ? { respond_message_id: respondPayload } : {})
+      })
       return
     }
     if (isGroup) {
-      await sendGroupMessage(groupUuid, { text })
+      await sendGroupMessage(groupUuid, {
+        text,
+        ...(respondPayload != null ? { respond_message_id: respondPayload } : {})
+      })
       return
     }
-    sendMessage({ recipientId, text })
+    sendMessage({
+      recipientId,
+      text,
+      ...(respondPayload != null ? { respondMessageId: respondPayload } : {})
+    })
   }
 
   async function maybeEncryptOutgoing(plain) {
@@ -552,39 +616,11 @@ async function handleDelete(msg) {
   if (!msg?.id) return
   if (!confirm('Удалить это сообщение?')) return
 
-  const c = chat.value
-  const channelUuid =
-    msg.channelId ||
-    msg.channel_id ||
-    parseChannelUuid(c?.id) ||
-    c?.channelId ||
-    c?.channel_uuid ||
-    c?.channelUuid ||
-    null
-  const groupUuid =
-    msg.groupId ||
-    msg.group_id ||
-    parseGroupUuid(c?.id) ||
-    c?.groupId ||
-    c?.group_uuid ||
-    c?.groupUuid ||
-    null
-
-  const snapshot = { ...msg }
   store.deleteMessage(msg.id)
   try {
-    if (channelUuid) {
-      await deleteChannelMessage(channelUuid, msg.id)
-    } else if (groupUuid) {
-      await deleteGroupMessage(groupUuid, msg.id)
-    } else {
-      await requestDeleteMessage(msg.id)
-    }
+    await requestDeleteMessage(msg.id)
   } catch (e) {
     console.error('delete failed:', e)
-    try {
-      await store.upsertMessage(snapshot)
-    } catch (_) {}
     alert(e.message || 'Не удалось удалить сообщение')
   }
 }

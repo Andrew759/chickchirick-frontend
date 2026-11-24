@@ -1,6 +1,14 @@
 <template>
   <div class="input-wrap" style="position: relative">
     <StickerPicker :open="stickerPickerOpen" @close="stickerPickerOpen = false" @select="onStickerSelect" />
+    <div v-if="replyTo" class="reply-bar">
+      <div class="reply-bar-main">
+        <span class="reply-bar-label">Ответ</span>
+        <span class="reply-bar-name">{{ replyName }}</span>
+        <span class="reply-bar-text">{{ replySnippet }}</span>
+      </div>
+      <button type="button" class="btn-clear" title="Отменить ответ" @click="clearReply">×</button>
+    </div>
     <div v-if="pendingFile" class="pending">
       <span class="pending-name" :title="pendingFile.name">
         {{ pendingIcon }} {{ pendingFile.name }}
@@ -73,7 +81,34 @@ const stickerPickerOpen = ref(false)
 const typingActive = ref(false)
 let typingHeartbeatTimer = null
 
-const emit = defineEmits(['send', 'typing'])
+const props = defineProps({
+  replyTo: { type: Object, default: null }
+})
+const emit = defineEmits(['send', 'typing', 'clear-reply'])
+
+const replyName = computed(() => {
+  const m = props.replyTo
+  if (!m) return ''
+  if (m.fromMe) return 'Вы'
+  return m._replyName || (m.senderId ? `User ${m.senderId}` : 'Сообщение')
+})
+const replySnippet = computed(() => {
+  const m = props.replyTo
+  if (!m) return ''
+  if (m.isSticker) return 'Стикер'
+  if (m.isVoiceMessage) return 'Голосовое сообщение'
+  if (m.isVideoNote) return 'Видеосообщение'
+  if (m.isImage) return 'Фото'
+  if (m.isVideo) return 'Видео'
+  if (m.isAudio) return 'Аудио'
+  if (m.fileUuid && !(m.text || '').trim()) return m.fileName || 'Файл'
+  const t = (m.text || '').trim()
+  return t.length > 100 ? t.slice(0, 97) + '…' : t || 'Сообщение'
+})
+
+function clearReply() {
+  emit('clear-reply')
+}
 
 const pendingIcon = computed(() => {
   const n = pendingFile.value?.name || ''
@@ -136,17 +171,20 @@ function clearFile() {
 
 function onVideoNoteRecorded(file) {
   videoNoteOpen.value = false
-  emit('send', { text: '', file, isVideoNote: true })
+  emit('send', { text: '', file, isVideoNote: true, respondMessageId: props.replyTo?.id || null })
+  emit('clear-reply')
 }
 
 function onVoiceRecorded(file) {
   voiceRecorderOpen.value = false
-  emit('send', { text: '', file, isVoiceMessage: true })
+  emit('send', { text: '', file, isVoiceMessage: true, respondMessageId: props.replyTo?.id || null })
+  emit('clear-reply')
 }
 
 function onStickerSelect(sticker) {
   if (!sticker?.image_uuid) return
-  emit('send', { text: '', sticker })
+  emit('send', { text: '', sticker, respondMessageId: props.replyTo?.id || null })
+  emit('clear-reply')
 }
 
 async function send() {
@@ -158,7 +196,8 @@ async function send() {
 
   sending.value = true
   try {
-    emit('send', { text: caption, file })
+    emit('send', { text: caption, file, respondMessageId: props.replyTo?.id || null })
+    emit('clear-reply')
     text.value = ''
     pendingFile.value = null
   } finally {
@@ -181,6 +220,42 @@ async function send() {
   /* for absolute sticker picker */
 }
 
+.reply-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 10px 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(42, 171, 238, 0.1);
+  border-left: 3px solid #2aabee;
+}
+.reply-bar-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.reply-bar-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #168dcc;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.reply-bar-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #163247;
+}
+.reply-bar-text {
+  font-size: 12.5px;
+  color: #5a7383;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .pending {
   display: flex;
   align-items: center;
