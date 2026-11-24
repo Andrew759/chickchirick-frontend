@@ -49,6 +49,7 @@
         @open-sender="onOpenSender"
         :can-reply="canReplyToMessages"
         @reply="handleReply"
+        @react="handleReact"
         @scroll-to="scrollToMessage"
       />
     </div>
@@ -78,6 +79,7 @@ import { useChatStore } from '../stores/chat'
 import { sendMessage, sendTyping, requestDeleteMessage } from '../services/socket'
 import { isGroupChatId, parseGroupUuid, sendGroupMessage, listGroupMembers, sendGroupTyping } from '../services/groups'
 import { isChannelChatId, parseChannelUuid, sendChannelMessage, listChannelMembers, sendChannelTyping } from '../services/channels'
+import { toggleReaction } from '../services/reactions'
 import { resolveChatUsers } from '../services/users'
 import { uploadFile, linkFileToMessage, getFileUrl } from '../services/files'
 import { buildFileMessageText } from '../services/fileMarker'
@@ -434,6 +436,17 @@ function stickerFileName(sticker) {
   return `sticker-${slug}.webp`
 }
 
+async function handleReact(msg, emoji) {
+  if (!msg?.id || !emoji) return
+  try {
+    const res = await toggleReaction(msg.id, emoji)
+    store.setMessageReactions(msg.id, res.reactions || [])
+  } catch (e) {
+    console.error('reaction failed:', e)
+    alert(e.message || 'Не удалось поставить реакцию')
+  }
+}
+
 function handleReply(msg) {
   if (!canReplyToMessages.value) return
   if (!msg?.id) return
@@ -764,8 +777,7 @@ watch(
   position: relative;
   flex: 1;
   overflow-y: auto;
-  overflow-x: hidden;
-  padding: 16px 20px 88px;
+  padding: 16px 12px 88px;
   display: flex;
   flex-direction: column;
   gap: 7px;

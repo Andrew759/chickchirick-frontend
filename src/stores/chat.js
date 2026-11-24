@@ -476,6 +476,7 @@ export const useChatStore = defineStore('chat', {
             message.respond_message_id ??
             message.RespondMessageID ??
             null,
+          reactions: Array.isArray(message.reactions) ? message.reactions : [],
           createdAt: normalizeCreatedAt(message.createdAt)
         })
       }
@@ -516,6 +517,26 @@ export const useChatStore = defineStore('chat', {
         !nextChats.some((c) => c.id === this.activeChatId)
       ) {
         this.activeChatId = null
+      }
+    },
+
+    setMessageReactions(messageId, reactions) {
+      const mid = Number(messageId)
+      if (!mid) return
+      const next = Array.isArray(reactions) ? reactions.map((r) => ({ ...r })) : []
+      for (const chat of this.chats) {
+        const msgs = chat.messages || []
+        const idx = msgs.findIndex((x) => Number(x.id) === mid)
+        if (idx >= 0) {
+          msgs[idx] = { ...msgs[idx], reactions: next }
+        }
+      }
+    },
+
+    applyReactionsMap(map) {
+      if (!map || typeof map !== 'object') return
+      for (const [id, reactions] of Object.entries(map)) {
+        this.setMessageReactions(id, reactions)
       }
     },
 
@@ -740,6 +761,7 @@ export const useChatStore = defineStore('chat', {
             }
             return rid != null && rid !== '' ? rid : null
           })(),
+          reactions: Array.isArray(msg.reactions) ? msg.reactions : [],
           createdAt: normalizeCreatedAt(msg.createdAt)
         })
 

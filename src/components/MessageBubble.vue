@@ -150,39 +150,71 @@
           ×
         </button>
       </div>
+      <div v-if="reactionChips.length" class="msg-reactions" @click.stop>
+        <button
+          v-for="r in reactionChips"
+          :key="r.emoji"
+          type="button"
+          class="msg-reaction-chip"
+          :class="{ me: r.me }"
+          :title="r.emoji"
+          @click.stop="$emit('react', msg, r.emoji)"
+        >
+          <span class="msg-reaction-emoji">{{ r.emoji }}</span>
+          <span v-if="r.count > 1" class="msg-reaction-count">{{ r.count }}</span>
+        </button>
+      </div>
       <div class="time">{{ timeLabel }}</div>
 
-      <!-- Мини-меню ответа слева от пузыря -->
+      <!-- Мини-меню: реакции + ответ -->
       <div
-        v-if="menuOpen && canReply"
+        v-if="menuOpen"
         class="msg-action-pop"
         @click.stop
       >
-        <button
-          type="button"
-          class="msg-action-reply-round"
-          title="Ответить"
-          @click.stop="confirmReply"
-        >
-          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-            <path
-              fill="currentColor"
-              d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"
-            />
-          </svg>
-        </button>
+        <div class="msg-action-panel">
+          <button
+            type="button"
+            class="msg-action-reply-round"
+            title="Реакция"
+            @click.stop="openEmojiModal"
+          >
+            <span class="msg-action-react-label" aria-hidden="true">😊</span>
+          </button>
+          <button
+            v-if="canReply"
+            type="button"
+            class="msg-action-reply-round"
+            title="Ответить"
+            @click.stop="confirmReply"
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
+
+      <EmojiPickerModal
+        :open="emojiModalOpen"
+        @close="emojiModalOpen = false"
+        @select="onPickReaction"
+      />
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { formatMessageTime, useChatStore } from '../stores/chat'
 import { getFileUrl } from '../services/files'
 import AudioPlayer from './AudioPlayer.vue'
 import VoiceMessagePlayer from './VoiceMessagePlayer.vue'
 import VideoNotePlayer from './VideoNotePlayer.vue'
+import EmojiPickerModal from './EmojiPickerModal.vue'
 
 /** Палитра как в Telegram — стабильный цвет по id */
 const SENDER_COLORS = [
@@ -203,10 +235,27 @@ const props = defineProps({
   canReply: { type: Boolean, default: true }
 })
 
-const emit = defineEmits(['open-photo', 'open-video', 'open-sticker', 'delete', 'open-sender', 'reply', 'scroll-to'])
+const emit = defineEmits(['open-photo', 'open-video', 'open-sticker', 'delete', 'open-sender', 'reply', 'scroll-to', 'react'])
 
 const store = useChatStore()
 const menuOpen = ref(false)
+const emojiModalOpen = ref(false)
+
+const reactionChips = computed(() => {
+  const list = props.msg?.reactions
+  return Array.isArray(list) ? list : []
+})
+
+function openEmojiModal() {
+  menuOpen.value = false
+  emojiModalOpen.value = true
+}
+
+function onPickReaction(emoji) {
+  emojiModalOpen.value = false
+  menuOpen.value = false
+  emit('react', props.msg, emoji)
+}
 
 function onBubbleClick(e) {
   // не перехватываем клики по вложенным интерактивам (медиа, ссылки, цитата, удаление)
@@ -214,7 +263,6 @@ function onBubbleClick(e) {
   if (t && t.closest && t.closest('button, a, input, textarea, video, audio, .file-link, .reply-quote, .btn-delete')) {
     return
   }
-  if (!props.canReply) return
   e.stopPropagation()
   menuOpen.value = !menuOpen.value
 }
@@ -236,17 +284,24 @@ function onDocPointer(e) {
 
 function onDocClick(e) {
   if (!menuOpen.value) return
-  // если клик не внутри нашего wrap — закрыть
-  // используем data attribute
   const wrap = e.target?.closest?.('[data-msg-menu-open="1"]')
   if (!wrap) menuOpen.value = false
 }
 
-onMounted(() => {
+function bindDocClose() {
   document.addEventListener('click', onDocClick, true)
-})
-onBeforeUnmount(() => {
+}
+function unbindDocClose() {
   document.removeEventListener('click', onDocClick, true)
+}
+
+watch(menuOpen, (open) => {
+  unbindDocClose()
+  if (open) bindDocClose()
+})
+
+onBeforeUnmount(() => {
+  unbindDocClose()
 })
 
 function messageSnippet(m) {
@@ -773,4 +828,81 @@ const displayText = computed(() => {
 :global(html[data-theme="dark"]) .bubble.me:not(.no-halo) {
   background: #174968 !important;
 }
+
+.msg-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+  max-width: 100%;
+}
+.msg-reaction-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid rgba(42, 171, 238, 0.25);
+  background: rgba(42, 171, 238, 0.08);
+  border-radius: 12px;
+  padding: 2px 7px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.2;
+  color: #163247;
+}
+.msg-reaction-chip.me {
+  border-color: rgba(42, 171, 238, 0.55);
+  background: rgba(42, 171, 238, 0.18);
+}
+.msg-reaction-chip:hover {
+  background: rgba(42, 171, 238, 0.2);
+}
+.msg-reaction-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #5a7383;
+}
+.msg-action-panel {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.msg-action-emojis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: 220px;
+  padding: 6px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.16);
+}
+.msg-action-emoji {
+  border: none;
+  background: transparent;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+.msg-action-emoji:hover {
+  background: rgba(42, 171, 238, 0.12);
+}
+:global(html[data-theme="dark"]) .msg-reaction-chip {
+  background: rgba(42, 171, 238, 0.12);
+  border-color: rgba(42, 171, 238, 0.3);
+  color: #e6edf3;
+}
+:global(html[data-theme="dark"]) .msg-reaction-count {
+  color: #9db0be;
+}
+:global(html[data-theme="dark"]) .msg-action-emojis {
+  background: #243746;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+}
+
 </style>

@@ -73,12 +73,13 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, nextTick } from 'vue'
 
 // тема до первого рендера панелей
 const _savedTheme = localStorage.getItem('messenger-theme') === 'dark' ? 'dark' : 'light'
 document.documentElement.dataset.theme = _savedTheme
 import { connectSocket, subscribe } from './services/socket'
+import { fetchReactionsBatch } from './services/reactions'
 import { listMyGroups, listGroupMembers, sendGroupMessage } from './services/groups'
 import { listMyChannels, listChannelMembers, sendChannelMessage } from './services/channels'
 import {
@@ -216,6 +217,15 @@ async function loadMessageHistory() {
 
   const history = await response.json()
   await store.setHistory(history)
+  try {
+    const ids = (history?.messages || []).map((m) => m.id).filter(Boolean)
+    if (ids.length) {
+      const map = await fetchReactionsBatch(ids)
+      store.applyReactionsMap(map)
+    }
+  } catch (e) {
+    console.warn('load reactions:', e)
+  }
 }
 
 function onGroupUpdated(group) {
@@ -426,6 +436,19 @@ function handleEvent(event) {
 
   if (event.message) {
     const text = event.message.text || ''
+    if (typeof text === 'string' && text.startsWith('__REACTION__')) {
+      try {
+        const payload = JSON.parse(text.slice('__REACTION__'.length))
+        if (payload?.message_id != null) {
+          const mid = payload.message_id
+          const reactions = payload.reactions || []
+          nextTick(() => store.setMessageReactions(mid, reactions))
+        }
+      } catch (e) {
+        console.warn('reaction event parse failed', e)
+      }
+      return
+    }
     // страховка, если WS не распарсил prefix
     if (typeof text === 'string' && text.startsWith('__GROUP_ADDED__')) {
       try {
@@ -454,8 +477,7 @@ function handleEvent(event) {
       loadChatNames()
     }
   }
-  const deletedId = event.deletedMessageId ?? event.deleted_message_id
-  if (deletedId) store.deleteMessage(deletedId)
+  if (event.deletedMessageId) store.deleteMessage(event.deletedMessageId)
   if (event.typing) {
     const gid = event.typing.groupId || event.typing.group_id || null
     const cid = event.typing.channelId || event.typing.channel_id || null
