@@ -5,8 +5,10 @@
       msg.fromMe ? 'me' : 'peer',
       isGroup ? 'group' : 'direct',
       showSenderMeta ? 'with-sender' : '',
-      isContinuation ? 'continuation' : ''
+      isContinuation ? 'continuation' : '',
+      menuOpen ? 'menu-open' : ''
     ]"
+    :data-msg-menu-open="menuOpen ? '1' : undefined"
   >
     <!-- Аватар слева (только входящие в группе) -->
     <div v-if="isGroup && !msg.fromMe" class="sender-avatar-col">
@@ -31,8 +33,11 @@
         isSticker ? 'sticker' : '',
         msg.isVoiceMessage ? 'voice' : '',
         msg.isVideoNote ? 'video-note' : '',
-        noHalo ? 'no-halo' : ''
+        noHalo ? 'no-halo' : '',
+        menuOpen ? 'menu-open' : '',
+        canReply ? 'can-reply' : ''
       ]"
+      @click="onBubbleClick"
     >
       <!-- Имя отправителя над пузырём (Telegram-style) -->
       <div
@@ -136,13 +141,6 @@
           <div v-if="showText" class="text">{{ displayText }}</div>
         </div>
         <button
-          v-if="canReply"
-          type="button"
-          class="btn-reply"
-          title="Ответить"
-          @click.stop="$emit('reply', msg)"
-        >↩</button>
-        <button
           v-if="msg.fromMe"
           type="button"
           class="btn-delete"
@@ -153,12 +151,33 @@
         </button>
       </div>
       <div class="time">{{ timeLabel }}</div>
+
+      <!-- Мини-меню ответа слева от пузыря -->
+      <div
+        v-if="menuOpen && canReply"
+        class="msg-action-pop"
+        @click.stop
+      >
+        <button
+          type="button"
+          class="msg-action-reply-round"
+          title="Ответить"
+          @click.stop="confirmReply"
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"
+            />
+          </svg>
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { formatMessageTime, useChatStore } from '../stores/chat'
 import { getFileUrl } from '../services/files'
 import AudioPlayer from './AudioPlayer.vue'
@@ -187,6 +206,48 @@ const props = defineProps({
 const emit = defineEmits(['open-photo', 'open-video', 'open-sticker', 'delete', 'open-sender', 'reply', 'scroll-to'])
 
 const store = useChatStore()
+const menuOpen = ref(false)
+
+function onBubbleClick(e) {
+  // не перехватываем клики по вложенным интерактивам (медиа, ссылки, цитата, удаление)
+  const t = e.target
+  if (t && t.closest && t.closest('button, a, input, textarea, video, audio, .file-link, .reply-quote, .btn-delete')) {
+    return
+  }
+  if (!props.canReply) return
+  e.stopPropagation()
+  menuOpen.value = !menuOpen.value
+}
+
+function confirmReply() {
+  menuOpen.value = false
+  emit('reply', props.msg)
+}
+
+function onDocPointer(e) {
+  if (!menuOpen.value) return
+  const root = e.target?.closest?.('.msg-wrap')
+  // закрываем, если клик вне этого сообщения
+  // (у каждого пузыря свой listener — закрываем только свой)
+  if (!root || !root.contains?.(e.target) || !e.currentTarget) {
+    // handled below via capture on document with root ref alternative
+  }
+}
+
+function onDocClick(e) {
+  if (!menuOpen.value) return
+  // если клик не внутри нашего wrap — закрыть
+  // используем data attribute
+  const wrap = e.target?.closest?.('[data-msg-menu-open="1"]')
+  if (!wrap) menuOpen.value = false
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocClick, true)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocClick, true)
+})
 
 function messageSnippet(m) {
   if (!m) return 'Сообщение'
@@ -525,7 +586,6 @@ const displayText = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.btn-reply,
 .btn-delete {
   opacity: 0;
   border: none;
@@ -537,15 +597,78 @@ const displayText = computed(() => {
   padding: 0 2px;
   flex-shrink: 0;
 }
-.bubble:hover .btn-reply,
-.bubble:focus-within .btn-reply,
 .bubble:hover .btn-delete,
 .bubble:focus-within .btn-delete {
   opacity: 1;
 }
-
 .btn-delete:hover {
   color: #e11d48;
+}
+
+.msg-wrap {
+  position: relative;
+}
+.bubble.can-reply {
+  cursor: pointer;
+}
+.bubble.menu-open {
+  outline: 2px solid rgba(42, 171, 238, 0.35);
+  outline-offset: 2px;
+}
+/* Меню к центру ленты: у входящих — справа от пузыря, у своих — слева.
+   Так иконка не уезжает за край окна. */
+.msg-action-pop {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  pointer-events: auto;
+}
+.msg-wrap.peer .msg-action-pop {
+  left: calc(100% + 8px);
+  right: auto;
+}
+.msg-wrap.me .msg-action-pop {
+  right: calc(100% + 8px);
+  left: auto;
+}
+.msg-action-pop .msg-action-reply-round {
+  animation: msg-pop-in 0.14s ease-out;
+}
+
+.msg-action-reply-round {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: #ffffff;
+  color: #168dcc;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.16);
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.msg-action-reply-round:hover {
+  background: #2aabee;
+  color: #fff;
+  transform: scale(1.06);
+}
+.msg-action-reply-round:active {
+  transform: scale(0.96);
+}
+@keyframes msg-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .msg-image {
@@ -602,9 +725,12 @@ const displayText = computed(() => {
   .msg-video-preview {
     max-width: min(100%, 280px);
   }
-  .bubble.me .btn-delete,
-  .bubble .btn-reply {
+  .bubble.me .btn-delete {
     opacity: 0.55;
+  }
+  .msg-action-reply-round {
+    width: 44px;
+    height: 44px;
   }
   .sender-avatar,
   .sender-avatar-spacer {
@@ -617,6 +743,15 @@ const displayText = computed(() => {
 }
 
 /* Dark theme */
+:global(html[data-theme="dark"]) .msg-action-reply-round {
+  background: #243746;
+  color: #7dd3fc;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+}
+:global(html[data-theme="dark"]) .msg-action-reply-round:hover {
+  background: #2aabee;
+  color: #fff;
+}
 :global(html[data-theme="dark"]) .reply-quote {
   background: rgba(42, 171, 238, 0.12);
 }

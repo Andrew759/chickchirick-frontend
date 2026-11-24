@@ -764,7 +764,8 @@ watch(
   position: relative;
   flex: 1;
   overflow-y: auto;
-  padding: 16px 12px 88px;
+  overflow-x: hidden;
+  padding: 16px 20px 88px;
   display: flex;
   flex-direction: column;
   gap: 7px;
