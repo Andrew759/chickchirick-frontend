@@ -42,6 +42,70 @@ export function fetchInstalledPacks() {
   return request('/me/sticker-packs')
 }
 
+/**
+ * Наборы, созданные текущим пользователем (включая неопубликованные).
+ * Бэкенд: GET /me/owned-sticker-packs. При отсутствии эндпоинта — пустой список.
+ */
+export function fetchOwnedPacks() {
+  return request('/me/owned-sticker-packs')
+}
+
+/**
+ * Проверка, является ли текущий пользователь создателем набора.
+ * Поддерживает типичные поля ответа API.
+ * @param {object|null} pack
+ * @param {{ myUserId?: number|null, userServiceId?: number|null, userUuid?: string|null }} me
+ */
+export function isPackOwner(pack, me = {}) {
+  if (!pack) return false
+  const ownerCandidates = [
+    pack.owner_id,
+    pack.ownerId,
+    pack.created_by,
+    pack.createdBy,
+    pack.user_id,
+    pack.userId,
+    pack.creator_id,
+    pack.creatorId,
+    pack.author_id,
+    pack.authorId
+  ]
+    .filter((v) => v != null && v !== '')
+    .map((v) => String(v))
+
+  const uuidCandidates = [
+    pack.owner_uuid,
+    pack.ownerUuid,
+    pack.created_by_uuid,
+    pack.createdByUuid,
+    pack.user_uuid,
+    pack.userUuid,
+    pack.creator_uuid,
+    pack.creatorUuid
+  ]
+    .filter((v) => v != null && v !== '')
+    .map((v) => String(v))
+
+  const myIds = [me.myUserId, me.userServiceId]
+    .filter((v) => v != null && v !== '')
+    .map((v) => String(v))
+  const myUuids = [me.userUuid].filter((v) => v != null && v !== '').map((v) => String(v))
+
+  if (ownerCandidates.some((id) => myIds.includes(id))) return true
+  if (uuidCandidates.some((id) => myUuids.includes(id))) return true
+  return false
+}
+
+/** true, если набор опубликован в каталоге */
+export function isPackPublished(pack) {
+  if (!pack) return false
+  const v = pack.is_published ?? pack.isPublished ?? pack.published
+  if (v === false || v === 0 || v === '0' || v === 'false') return false
+  // если поля нет — считаем опубликованным (как в публичном каталоге)
+  if (v == null) return true
+  return Boolean(v)
+}
+
 export function installPack(packId) {
   return request(`/sticker-packs/${encodeURIComponent(packId)}/install`, { method: 'POST' })
 }

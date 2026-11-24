@@ -75,7 +75,7 @@
                 alt=""
             />
             <span v-else class="sm-pack-cover-lg ph">{{ (currentPack?.title || '?')[0] }}</span>
-            <label class="sm-cover-edit" title="Сменить обложку">
+            <label v-if="canEditCurrentPack" class="sm-cover-edit" title="Сменить обложку">
               <input type="file" accept="image/*" hidden :disabled="coverUpdating" @change="onChangeCover" />
               <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
                 <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/>
@@ -90,17 +90,21 @@
 
         <p v-if="stickersLoading" class="sm-hint">Загрузка…</p>
         <div class="sm-grid">
-          <div v-for="s in packStickers" :key="s.id" class="sm-cell has-actions">
+          <div
+            v-for="s in packStickers"
+            :key="s.id"
+            :class="['sm-cell', canEditCurrentPack && 'has-actions']"
+          >
             <img :src="fileUrl(s.image_uuid)" :alt="s.title || s.slug" />
             <span v-if="s.emoji" class="sm-emoji-badge">{{ s.emoji }}</span>
             <span v-if="s.audio_uuid" class="sm-audio-badge" title="Есть музыка">♪</span>
-            <div class="sm-cell-actions">
+            <div v-if="canEditCurrentPack" class="sm-cell-actions">
               <button type="button" class="sm-mini" title="Эмодзи" @click="startEditEmoji(s)">☺</button>
               <button type="button" class="sm-mini" title="Музыка" @click="startEditAudio(s)">♪</button>
               <button type="button" class="sm-mini danger" title="Удалить" @click="onDeleteSticker(s)">×</button>
             </div>
           </div>
-          <label class="sm-cell add" :class="{ busy: uploading }">
+          <label v-if="canEditCurrentPack" class="sm-cell add" :class="{ busy: uploading }">
             <input type="file" accept="image/*" multiple hidden :disabled="uploading" @change="onAddStickers" />
             <span class="sm-add-inner">
               <svg v-if="!uploading" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
@@ -208,9 +212,11 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { getFileUrl, uploadFile } from '../services/files'
 import { getAllEmojis } from '../services/emojis'
+import { useChatStore } from '../stores/chat'
 import {
   fetchStickerPacks,
   fetchInstalledPacks,
+  fetchOwnedPacks,
   fetchPackStickers,
   installPack,
   uninstallPack,
@@ -219,10 +225,13 @@ import {
   createSticker,
   updateSticker,
   deleteSticker,
-  slugify
+  slugify,
+  isPackOwner,
+  isPackPublished
 } from '../services/stickers'
 
 const emit = defineEmits(['close'])
+const store = useChatStore()
 
 const view = ref('list')
 const tab = ref('mine')
@@ -232,6 +241,8 @@ const status = ref('')
 const busy = ref(null)
 const installed = ref([])
 const catalog = ref([])
+/** Созданные текущим пользователем наборы (в т.ч. неопубликованные) */
+const owned = ref([])
 
 const currentPack = ref(null)
 const packStickers = ref([])
@@ -254,9 +265,48 @@ const coverFile = ref(null)
 const coverName = ref('')
 const saving = ref(false)
 
-const visiblePacks = computed(() =>
-    tab.value === 'mine' ? installed.value : catalog.value
+function meIdentity() {
+  return {
+    myUserId: store.myUserId,
+    userServiceId: store.myProfile?.userServiceId,
+    userUuid: store.myProfile?.userUuid
+  }
+}
+
+function packOwnedByMe(pack) {
+  return isPackOwner(pack, meIdentity())
+}
+
+/** Установленные + свои (в т.ч. неопубликованные) — без дублей */
+const minePacks = computed(() => {
+  const byId = new Map()
+  for (const p of installed.value) byId.set(p.id, p)
+  for (const p of owned.value) {
+    if (!byId.has(p.id)) byId.set(p.id, p)
+  }
+  // на случай, если owned-эндпоинта нет, но каталог отдал чужие+свои
+  for (const p of catalog.value) {
+    if (packOwnedByMe(p) && !byId.has(p.id)) byId.set(p.id, p)
+  }
+  return [...byId.values()]
+})
+
+/** В каталоге — только опубликованные */
+const catalogPublished = computed(() =>
+  catalog.value.filter((p) => isPackPublished(p))
 )
+
+const visiblePacks = computed(() =>
+  tab.value === 'mine' ? minePacks.value : catalogPublished.value
+)
+
+const canEditCurrentPack = computed(() => {
+  if (!currentPack.value) return false
+  if (packOwnedByMe(currentPack.value)) return true
+  // Набор из списка «созданные мной» (ответ create / owned-эндпоинт) —
+  // даже если в объекте ещё нет owner_id.
+  return owned.value.some((p) => p.id === currentPack.value.id)
+})
 
 const viewTitle = computed(() => {
   if (view.value === 'create') return 'Новый набор'
@@ -290,12 +340,20 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [cat, mine] = await Promise.all([
+    const prevOwned = owned.value
+    const [cat, mine, mineOwned] = await Promise.all([
       fetchStickerPacks().catch(() => []),
-      fetchInstalledPacks().catch(() => [])
+      fetchInstalledPacks().catch(() => []),
+      fetchOwnedPacks().catch(() => [])
     ])
     catalog.value = Array.isArray(cat) ? cat : []
     installed.value = Array.isArray(mine) ? mine : []
+    // Мержим с локально известными (только что созданные неопубликованные),
+    // иначе load() затирает их, если бэкенд ещё не отдаёт owned-эндпоинт.
+    const byId = new Map()
+    for (const p of prevOwned) byId.set(p.id, p)
+    for (const p of Array.isArray(mineOwned) ? mineOwned : []) byId.set(p.id, p)
+    owned.value = [...byId.values()]
   } catch (e) {
     error.value = e.message || 'Ошибка загрузки'
   } finally {
@@ -317,8 +375,14 @@ async function openPack(pack) {
       packStickers.value = Array.isArray(list) ? list : []
     }
   } catch (e) {
-    packStickers.value = []
-    status.value = e.message || 'Не удалось загрузить'
+    packStickers.value = pack.stickers || []
+    // Неопубликованный набор часто недоступен через публичный GET —
+    // для владельца это нормально: показываем пустую сетку без красной ошибки.
+    const msg = e?.message || 'Не удалось загрузить'
+    const soft = /not found|не найден|404/i.test(msg)
+    if (!soft || !canEditCurrentPack.value) {
+      status.value = msg
+    }
   } finally {
     stickersLoading.value = false
   }
@@ -357,6 +421,7 @@ function onCover(e) {
 async function submitPack() {
   const title = form.value.title.trim()
   if (!title) return
+  const publish = !!form.value.published
   saving.value = true
   status.value = ''
   try {
@@ -370,20 +435,42 @@ async function submitPack() {
       title,
       description: '',
       image_uuid: imageUuid,
-      is_published: !!form.value.published,
+      is_published: publish,
       sort_order: 0
     })
+    // Нормализуем ответ: бэкенд может не вернуть is_published
+    const created = {
+      ...(pack || {}),
+      is_published: pack?.is_published ?? pack?.isPublished ?? publish,
+      title: pack?.title || title,
+      image_uuid: pack?.image_uuid || imageUuid
+    }
     form.value = { title: '', published: true }
     coverFile.value = null
     coverName.value = ''
-    await load()
-    await openPack(pack)
-    try {
-      await installPack(pack.id)
-      if (!isInstalled(pack.id)) installed.value = [...installed.value, pack]
-    } catch {
-      /* ignore */
+    // Локально: создатель всегда видит свой набор (в т.ч. черновик)
+    if (created.id != null) {
+      if (!owned.value.some((p) => p.id === created.id)) {
+        owned.value = [...owned.value, created]
+      }
+      if (!installed.value.some((p) => p.id === created.id)) {
+        installed.value = [...installed.value, created]
+      }
     }
+    await openPack(created)
+    // install только для опубликованных — иначе API часто отвечает "sticker pack not found"
+    if (publish && created.id != null) {
+      try {
+        await installPack(created.id)
+        if (!isInstalled(created.id)) {
+          installed.value = [...installed.value, created]
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    // фоновый refresh; merge в load() сохранит created в owned
+    load().catch(() => {})
   } catch (e) {
     status.value = e.message || 'Не удалось создать'
   } finally {
@@ -394,7 +481,7 @@ async function submitPack() {
 async function onChangeCover(e) {
   const file = e.target.files?.[0]
   e.target.value = ''
-  if (!file || !currentPack.value) return
+  if (!file || !currentPack.value || !canEditCurrentPack.value) return
   coverUpdating.value = true
   status.value = ''
   try {
@@ -407,6 +494,7 @@ async function onChangeCover(e) {
         list.map((p) => (p.id === currentPack.value.id ? { ...p, image_uuid: imageUuid } : p))
     catalog.value = sync(catalog.value)
     installed.value = sync(installed.value)
+    owned.value = sync(owned.value)
     status.value = 'Обложка обновлена'
   } catch (err) {
     status.value = err.message || 'Не удалось сменить обложку'
@@ -418,7 +506,7 @@ async function onChangeCover(e) {
 async function onAddStickers(e) {
   const files = [...(e.target.files || [])]
   e.target.value = ''
-  if (!files.length || !currentPack.value) return
+  if (!files.length || !currentPack.value || !canEditCurrentPack.value) return
   uploading.value = true
   status.value = ''
   let ok = 0
@@ -448,12 +536,13 @@ async function onAddStickers(e) {
 }
 
 function startEditEmoji(sticker) {
+  if (!canEditCurrentPack.value) return
   emojiEdit.value = sticker
   emojiDraft.value = sticker.emoji || ''
 }
 
 async function saveEmoji() {
-  if (!emojiEdit.value) return
+  if (!emojiEdit.value || !canEditCurrentPack.value) return
   emojiSaving.value = true
   status.value = ''
   try {
@@ -472,6 +561,7 @@ async function saveEmoji() {
 }
 
 function startEditAudio(sticker) {
+  if (!canEditCurrentPack.value) return
   audioEdit.value = sticker
   audioFile.value = null
   audioFileName.value = ''
@@ -493,7 +583,7 @@ function onPickAudio(e) {
 }
 
 async function saveAudio() {
-  if (!audioEdit.value || !audioFile.value) return
+  if (!audioEdit.value || !audioFile.value || !canEditCurrentPack.value) return
   audioSaving.value = true
   status.value = ''
   try {
@@ -513,7 +603,7 @@ async function saveAudio() {
 }
 
 async function clearAudio() {
-  if (!audioEdit.value) return
+  if (!audioEdit.value || !canEditCurrentPack.value) return
   audioSaving.value = true
   status.value = ''
   try {
@@ -531,6 +621,7 @@ async function clearAudio() {
 }
 
 async function onDeleteSticker(sticker) {
+  if (!canEditCurrentPack.value) return
   if (!confirm('Удалить этот стикер?')) return
   status.value = ''
   try {

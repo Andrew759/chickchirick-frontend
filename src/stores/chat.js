@@ -714,8 +714,15 @@ export const useChatStore = defineStore('chat', {
     },
 
     deleteMessage(id) {
-      this.chats.forEach(chat => {
-        chat.messages = chat.messages.filter(m => m.id !== id)
+      const nid = id != null ? Number(id) : NaN
+      const sid = id != null ? String(id) : ''
+      this.chats.forEach((chat) => {
+        chat.messages = (chat.messages || []).filter((m) => {
+          if (m?.id == null) return true
+          if (!Number.isNaN(nid) && Number(m.id) === nid) return false
+          if (String(m.id) === sid) return false
+          return true
+        })
       })
       sortChatsByLastMessage(this.chats)
     },

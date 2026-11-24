@@ -134,6 +134,24 @@ export async function sendChannelMessage(channelUuid, payload) {
   return res.json()
 }
 
+/**
+ * Удаление поста в канале.
+ * DELETE /channels/{uuid}/messages/{id}
+ */
+export async function deleteChannelMessage(channelUuid, messageId) {
+  const id = encodeURIComponent(String(messageId))
+  const res = await fetch(
+    `${API}/channels/${encodeURIComponent(channelUuid)}/messages/${id}`,
+    { method: 'DELETE', credentials: 'include' }
+  )
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    const msg = data.error || data.errors?.[0]?.message || `delete channel message failed: ${res.status}`
+    throw new Error(msg)
+  }
+  return true
+}
+
 export async function listChannelMembers(channelUuid) {
   const res = await fetch(`${API}/channels/${encodeURIComponent(channelUuid)}/members`, {
     credentials: 'include'

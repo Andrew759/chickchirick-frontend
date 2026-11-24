@@ -71,8 +71,8 @@
 import { computed, ref, watch, nextTick } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { sendMessage, sendTyping, requestDeleteMessage } from '../services/socket'
-import { isGroupChatId, parseGroupUuid, sendGroupMessage, listGroupMembers, sendGroupTyping } from '../services/groups'
-import { isChannelChatId, parseChannelUuid, sendChannelMessage, listChannelMembers, sendChannelTyping } from '../services/channels'
+import { isGroupChatId, parseGroupUuid, sendGroupMessage, listGroupMembers, sendGroupTyping, deleteGroupMessage } from '../services/groups'
+import { isChannelChatId, parseChannelUuid, sendChannelMessage, listChannelMembers, sendChannelTyping, deleteChannelMessage } from '../services/channels'
 import { resolveChatUsers } from '../services/users'
 import { uploadFile, linkFileToMessage, getFileUrl } from '../services/files'
 import { buildFileMessageText } from '../services/fileMarker'
@@ -552,11 +552,39 @@ async function handleDelete(msg) {
   if (!msg?.id) return
   if (!confirm('Удалить это сообщение?')) return
 
+  const c = chat.value
+  const channelUuid =
+    msg.channelId ||
+    msg.channel_id ||
+    parseChannelUuid(c?.id) ||
+    c?.channelId ||
+    c?.channel_uuid ||
+    c?.channelUuid ||
+    null
+  const groupUuid =
+    msg.groupId ||
+    msg.group_id ||
+    parseGroupUuid(c?.id) ||
+    c?.groupId ||
+    c?.group_uuid ||
+    c?.groupUuid ||
+    null
+
+  const snapshot = { ...msg }
   store.deleteMessage(msg.id)
   try {
-    await requestDeleteMessage(msg.id)
+    if (channelUuid) {
+      await deleteChannelMessage(channelUuid, msg.id)
+    } else if (groupUuid) {
+      await deleteGroupMessage(groupUuid, msg.id)
+    } else {
+      await requestDeleteMessage(msg.id)
+    }
   } catch (e) {
     console.error('delete failed:', e)
+    try {
+      await store.upsertMessage(snapshot)
+    } catch (_) {}
     alert(e.message || 'Не удалось удалить сообщение')
   }
 }

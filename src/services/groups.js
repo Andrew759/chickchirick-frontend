@@ -93,6 +93,24 @@ export async function sendGroupMessage(groupUuid, payload) {
 }
 
 /**
+ * Удаление сообщения в группе.
+ * DELETE /group-chats/{uuid}/messages/{id}
+ */
+export async function deleteGroupMessage(groupUuid, messageId) {
+  const id = encodeURIComponent(String(messageId))
+  const res = await fetch(
+    `${API}/group-chats/${encodeURIComponent(groupUuid)}/messages/${id}`,
+    { method: 'DELETE', credentials: 'include' }
+  )
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    const msg = data.error || data.errors?.[0]?.message || `delete group message failed: ${res.status}`
+    throw new Error(msg)
+  }
+  return true
+}
+
+/**
  * Стабильный id чата на фронте для группы.
  * @param {string} groupUuid
  */

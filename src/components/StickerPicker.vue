@@ -99,12 +99,16 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { getFileUrl } from '../services/files'
+import { useChatStore } from '../stores/chat'
 import {
   fetchStickerPacks,
   fetchInstalledPacks,
+  fetchOwnedPacks,
   fetchPackStickers,
   installPack,
-  uninstallPack
+  uninstallPack,
+  isPackOwner,
+  isPackPublished
 } from '../services/stickers'
 
 const props = defineProps({
@@ -112,6 +116,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'select'])
+const store = useChatStore()
 
 const tab = ref('mine')
 const loading = ref(false)
@@ -121,11 +126,38 @@ const installing = ref(false)
 
 const catalog = ref([])
 const installed = ref([])
+/** Созданные текущим пользователем (в т.ч. неопубликованные) */
+const owned = ref([])
 const selectedPackId = ref(null)
 const stickersCache = ref({}) // packId -> stickers[]
 
+function meIdentity() {
+  return {
+    myUserId: store.myUserId,
+    userServiceId: store.myProfile?.userServiceId,
+    userUuid: store.myProfile?.userUuid
+  }
+}
+
+/** Установленные + свои неопубликованные / созданные */
+const minePacks = computed(() => {
+  const byId = new Map()
+  for (const p of installed.value) byId.set(p.id, p)
+  for (const p of owned.value) {
+    if (!byId.has(p.id)) byId.set(p.id, p)
+  }
+  for (const p of catalog.value) {
+    if (isPackOwner(p, meIdentity()) && !byId.has(p.id)) byId.set(p.id, p)
+  }
+  return [...byId.values()]
+})
+
+const catalogPublished = computed(() =>
+  catalog.value.filter((p) => isPackPublished(p))
+)
+
 const visiblePacks = computed(() =>
-  tab.value === 'mine' ? installed.value : catalog.value
+  tab.value === 'mine' ? minePacks.value : catalogPublished.value
 )
 
 const selectedPack = computed(() =>
@@ -158,7 +190,7 @@ async function loadAll() {
   loading.value = true
   error.value = ''
   try {
-    const [cat, mine] = await Promise.all([
+    const [cat, mine, mineOwned] = await Promise.all([
       fetchStickerPacks().catch((e) => {
         console.warn(e)
         return []
@@ -167,13 +199,19 @@ async function loadAll() {
         // без авторизации — пусто
         console.warn(e)
         return []
-      })
+      }),
+      fetchOwnedPacks().catch(() => [])
     ])
     catalog.value = Array.isArray(cat) ? cat : []
     installed.value = Array.isArray(mine) ? mine : []
+    // Мержим с локально известными owned (созданные в этой сессии)
+    const byId = new Map()
+    for (const p of owned.value) byId.set(p.id, p)
+    for (const p of Array.isArray(mineOwned) ? mineOwned : []) byId.set(p.id, p)
+    owned.value = [...byId.values()]
 
     // автовыбор первого пака
-    const list = tab.value === 'mine' ? installed.value : catalog.value
+    const list = tab.value === 'mine' ? minePacks.value : catalogPublished.value
     if (list.length && !selectedPackId.value) {
       await selectPack(list[0])
     } else if (list.length && selectedPackId.value) {
@@ -249,7 +287,7 @@ watch(
 )
 
 watch(tab, async () => {
-  const list = tab.value === 'mine' ? installed.value : catalog.value
+  const list = tab.value === 'mine' ? minePacks.value : catalogPublished.value
   if (list.length) await selectPack(list[0])
   else selectedPackId.value = null
 })

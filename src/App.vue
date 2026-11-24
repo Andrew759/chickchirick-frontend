@@ -454,7 +454,8 @@ function handleEvent(event) {
       loadChatNames()
     }
   }
-  if (event.deletedMessageId) store.deleteMessage(event.deletedMessageId)
+  const deletedId = event.deletedMessageId ?? event.deleted_message_id
+  if (deletedId) store.deleteMessage(deletedId)
   if (event.typing) {
     const gid = event.typing.groupId || event.typing.group_id || null
     const cid = event.typing.channelId || event.typing.channel_id || null
