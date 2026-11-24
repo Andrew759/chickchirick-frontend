@@ -638,22 +638,40 @@ async function handleDelete(msg) {
   }
 }
 
+function scrollMessagesToEnd() {
+  const el = messagesEl.value
+  if (!el) return
+  el.scrollTop = el.scrollHeight
+}
+
+/** Надёжный скролл вниз: после DOM + после layout (картинки/шрифты). */
+async function scrollToLatestMessage() {
+  await nextTick()
+  scrollMessagesToEnd()
+  // ещё кадр — высота списка могла вырасти после рендера пузырей
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+  scrollMessagesToEnd()
+  // короткий отложенный дожим (на случай поздней подгрузки реакций/медиа)
+  setTimeout(scrollMessagesToEnd, 50)
+  setTimeout(scrollMessagesToEnd, 200)
+}
+
+// Новые сообщения / смена длины ленты
 watch(
   () => chat.value?.messages?.length,
-  async () => {
-    await nextTick()
-    if (messagesEl.value) {
-      // Новые сообщения внизу — прокручиваем к концу списка
-      messagesEl.value.scrollTop = messagesEl.value.scrollHeight
-    }
+  () => {
+    scrollToLatestMessage()
   }
 )
 
-// При открытии чата — инициируем обмен ключами, если ещё нет ключа собеседника
+// При открытии/смене чата — сразу к последнему сообщению
 watch(
   () => chat.value?.id,
   (id) => {
-    if (id) ensureE2eeReady(id)
+    if (id) {
+      scrollToLatestMessage()
+      ensureE2eeReady(id)
+    }
   },
   { immediate: true }
 )
