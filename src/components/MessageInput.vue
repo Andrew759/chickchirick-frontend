@@ -35,7 +35,16 @@
           />
         </svg>
       </button>
-      <input v-model="text" @input="handleInput" @blur="stopTyping" @keyup.enter="send" placeholder="Сообщение" />
+      <textarea
+        ref="textArea"
+        v-model="text"
+        rows="1"
+        class="msg-textarea"
+        placeholder="Сообщение"
+        @input="onTextInput"
+        @blur="stopTyping"
+        @keydown="onKeydown"
+      />
       <button
         v-if="!text.trim() && !pendingFile"
         type="button"
@@ -65,13 +74,15 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import VideoNoteRecorder from './VideoNoteRecorder.vue'
 import VoiceRecorder from './VoiceRecorder.vue'
 import StickerPicker from './StickerPicker.vue'
 import { isAudioFilename, isImageFilename, isVideoFilename } from '../services/files'
 
 const text = ref('')
+const textArea = ref(null)
+const MAX_LINES = 10
 const pendingFile = ref(null)
 const fileInput = ref(null)
 const sending = ref(false)
@@ -110,6 +121,10 @@ function clearReply() {
   emit('clear-reply')
 }
 
+watch(text, () => {
+  nextTick(resizeTextarea)
+})
+
 const pendingIcon = computed(() => {
   const n = pendingFile.value?.name || ''
   if (isAudioFilename(n)) return '🎵'
@@ -134,9 +149,37 @@ function startTypingHeartbeat() {
   }, 1000)
 }
 
+function resizeTextarea() {
+  const el = textArea.value
+  if (!el) return
+  el.style.height = 'auto'
+  const style = getComputedStyle(el)
+  const lineHeight = parseFloat(style.lineHeight) || 20
+  const padTop = parseFloat(style.paddingTop) || 0
+  const padBottom = parseFloat(style.paddingBottom) || 0
+  const maxH = lineHeight * MAX_LINES + padTop + padBottom
+  const next = Math.min(el.scrollHeight, maxH)
+  el.style.height = `${next}px`
+  el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden'
+}
+
+function onTextInput() {
+  handleInput()
+  nextTick(resizeTextarea)
+}
+
+function onKeydown(e) {
+  // Enter — отправить, Shift+Enter — новая строка
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    send()
+  }
+}
+
 function handleInput() {
   if (!text.value.trim()) {
     stopTyping()
+    nextTick(resizeTextarea)
     return
   }
 
@@ -200,6 +243,7 @@ async function send() {
     emit('clear-reply')
     text.value = ''
     pendingFile.value = null
+    nextTick(resizeTextarea)
   } finally {
     sending.value = false
   }
@@ -321,12 +365,32 @@ async function send() {
   display: block;
 }
 
-.input > input[type='text'],
-.input > input:not([type]) {
+.input {
+  align-items: flex-end;
+}
+
+.input > .msg-textarea,
+.msg-textarea {
   flex: 1;
-  padding: 10px;
-  border-radius: 20px;
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: 18px;
   border: none;
+  resize: none;
+  outline: none;
+  font: inherit;
+  font-size: 14.5px;
+  line-height: 1.35;
+  max-height: calc(1.35em * 10 + 20px);
+  overflow-y: hidden;
+  background: #fff;
+  color: inherit;
+  box-sizing: border-box;
+  field-sizing: content; /* progressive enhancement */
+}
+
+.msg-textarea::placeholder {
+  color: #8aa1ae;
 }
 
 .input > button:last-child {
@@ -364,8 +428,7 @@ async function send() {
     gap: 2px;
   }
 
-  .input > input[type='text'],
-  .input > input:not([type]) {
+  .msg-textarea {
     font-size: 16px; /* iOS: без авто-зума */
     padding: 11px 14px;
   }
@@ -388,5 +451,12 @@ async function send() {
   border-top: 1px solid #252d38 !important;
   box-shadow: none !important;
   background: #1a222c !important;
+}
+:global(html[data-theme="dark"]) .msg-textarea {
+  background: #243140;
+  color: #e6edf3;
+}
+:global(html[data-theme="dark"]) .msg-textarea::placeholder {
+  color: #91a4b4;
 }
 </style>

@@ -615,12 +615,12 @@ const displayText = computed(() => {
   outline: 2px solid rgba(42, 171, 238, 0.35);
   outline-offset: 2px;
 }
-/* Меню к центру ленты: у входящих — справа от пузыря, у своих — слева.
-   Так иконка не уезжает за край окна. */
+/* Меню у нижнего края пузыря, к центру ленты (не за край окна). */
 .msg-action-pop {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  bottom: 2px;
+  top: auto;
+  transform: none;
   z-index: 6;
   display: flex;
   align-items: center;
