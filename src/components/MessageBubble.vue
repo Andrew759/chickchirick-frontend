@@ -60,7 +60,7 @@
             <span class="reply-quote-bar" aria-hidden="true" />
             <span class="reply-quote-body">
               <span class="reply-quote-name">{{ replyPreview.name }}</span>
-              <span class="reply-quote-text">{{ replyPreview.snippet }}</span>
+              <span class="reply-quote-text">{{ replySnippetFinal }}</span>
             </span>
           </button>
           <div v-if="msg.fileUuid" class="attachment">
@@ -214,6 +214,7 @@
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { formatMessageTime, useChatStore } from '../stores/chat'
 import { getFileUrl } from '../services/files'
+import { isEncryptedText } from '../services/crypto'
 import AudioPlayer from './AudioPlayer.vue'
 import VoiceMessagePlayer from './VoiceMessagePlayer.vue'
 import VideoNotePlayer from './VideoNotePlayer.vue'
@@ -344,6 +345,64 @@ const replyPreview = computed(() => {
     name: senderLabel(found) || 'Сообщение',
     snippet: messageSnippet(found)
   }
+})
+
+// Превью цитаты/закрепа через тот же E2EE-пайплайн дешифровки, что и лента:
+// если найденное сообщение всё ещё содержит сырой e2ee:* текст — дешифруем на лету.
+const decryptedReplySnippet = ref('')
+
+async function refreshReplySnippet() {
+  const rid = props.msg?.respondMessageId ?? props.msg?.respond_message_id
+  if (rid == null || rid === '') {
+    decryptedReplySnippet.value = ''
+    return
+  }
+  const idNum = Number(rid)
+  const list = props.chatMessages || []
+  const found = list.find((m) => Number(m.id) === idNum || String(m.id) === String(rid))
+  if (!found) {
+    decryptedReplySnippet.value = ''
+    return
+  }
+  // нешифрованный текст уже готов — используем обычное превью
+  const raw = found.text ?? ''
+  const looksEncrypted =
+    isEncryptedText(raw) || /^e2ee:v\d+:/i.test(String(raw).trim())
+  if (!looksEncrypted) {
+    decryptedReplySnippet.value = ''
+    return
+  }
+  try {
+    const plain = await store.resolveDisplayTextFor(found)
+    decryptedReplySnippet.value = plain && !isEncryptedText(plain) ? plain : ''
+  } catch (e) {
+    console.warn('reply snippet decrypt:', e)
+    decryptedReplySnippet.value = ''
+  }
+}
+
+watch(
+  () => [
+    props.msg?.respondMessageId ?? props.msg?.respond_message_id,
+    props.chatMessages?.length,
+    (() => {
+      const rid = props.msg?.respondMessageId ?? props.msg?.respond_message_id
+      const m = (props.chatMessages || []).find(
+        (x) => Number(x.id) === Number(rid) || String(x.id) === String(rid)
+      )
+      return m?.text
+    })()
+  ],
+  refreshReplySnippet,
+  { immediate: true }
+)
+
+const replySnippetFinal = computed(() => {
+  if (decryptedReplySnippet.value) {
+    const t = decryptedReplySnippet.value.trim()
+    return t.length > 120 ? t.slice(0, 117) + '…' : t
+  }
+  return replyPreview.value?.snippet || 'Сообщение'
 })
 
 const fileUrl = computed(() => getFileUrl(props.msg.fileUuid))

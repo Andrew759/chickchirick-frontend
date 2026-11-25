@@ -14,6 +14,7 @@ import {
   isChannelEncryptedText,
   resolveChannelE2eeDisplayText,
   resolveGroupE2eeDisplayText,
+  resolveChatE2eeDisplayText,
   consumeGroupKeyMessage
 } from '../services/crypto'
 import { getGroup } from '../services/groups'
@@ -231,6 +232,36 @@ export const useChatStore = defineStore('chat', {
   },
 
   actions: {
+    /**
+     * Текст сообщения для отображения в превью (цитаты/закреплённые) —
+     * прогоняет rawText через тот же E2EE-пайплайн дешифровки, что и лента.
+     * Если сообщение ещё не расшифровано в сторе (raw e2ee:*), дешифруем на лету.
+     */
+    async resolveDisplayTextFor(m) {
+      if (!m) return ''
+      const raw = m.text ?? ''
+      const encrypted =
+        isEncryptedText(raw) ||
+        isGroupEncryptedText(raw) ||
+        (typeof raw === 'string' && /^e2ee:v\d+:/i.test(raw.trim()))
+      if (!encrypted) return raw
+      // уже есть расшифрованная версия в ленте того же чата — берём её
+      const chatId = m.channelId || m.groupId || String(m.recipientId ?? m.senderId ?? '')
+      const chat = this.chats.find((c) => String(c.id) === String(chatId))
+      const decrypted = chat?.messages?.find(
+        (x) => (Number(x.id) === Number(m.id) || String(x.id) === String(m.id)) && !isEncryptedText(x.text ?? '')
+      )
+      if (decrypted) return decrypted.text
+      const ctx = m.channelId
+        ? { chatType: 'channel', chatId: m.channelId }
+        : m.groupId
+          ? { chatType: 'group', chatId: m.groupId }
+          : { chatType: 'direct', chatId: null }
+      return resolveChatE2eeDisplayText(
+        { ...ctx, senderId: m.senderId, myUserId: this.myUserId },
+        raw
+      )
+    },
     setAuthenticated(value) {
       this.isAuthenticated = value
     },

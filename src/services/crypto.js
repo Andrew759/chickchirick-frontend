@@ -451,6 +451,36 @@ export function tryConsumeKeyAnnounce(senderId, text) {
 }
 
 /**
+ * Единая точка дешифровки текста для отображения (в т.ч. превью цитат/закрепов).
+ * Маршрутизирует rawText в зависимости от типа чата:
+ *  - канал  -> resolveChannelE2eeDisplayText (shared channel key)
+ *  - группа -> resolveGroupE2eeDisplayText   (shared group key)
+ *  - диалог -> resolveE2eeDisplayText        (pairwise E2EE)
+ * Возвращает '' для control-сообщений (раздача ключей).
+ */
+export async function resolveChatE2eeDisplayText({ chatType, chatId, senderId, myUserId }, rawText) {
+  if (rawText == null || rawText === '') return rawText ?? ''
+  const enc = isEncryptedText(rawText) || isGroupEncryptedText(rawText) ||
+    (typeof rawText === 'string' && /^e2ee:v\d+:/i.test(rawText.trim()))
+  if (!enc) return rawText
+  try {
+    if (chatType === 'channel') {
+      const plain = await resolveChannelE2eeDisplayText(chatId, rawText, senderId, myUserId)
+      return plain == null ? 'Зашифрованное сообщение' : plain
+    }
+    if (chatType === 'group') {
+      const plain = await resolveGroupE2eeDisplayText(chatId, rawText, senderId, myUserId)
+      return plain == null ? 'Зашифрованное сообщение' : plain
+    }
+    const plain = await resolveE2eeDisplayText(senderId, rawText)
+    return plain == null ? 'Зашифрованное сообщение' : plain
+  } catch (e) {
+    console.warn('resolveChatE2eeDisplayText:', e)
+    return 'Зашифрованное сообщение'
+  }
+}
+
+/**
  * Всегда возвращает текст для UI: plaintext либо «Зашифрованное сообщение».
  * Никогда не отдаёт сырой e2ee:* в интерфейс.
  */

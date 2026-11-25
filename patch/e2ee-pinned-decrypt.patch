@@ -1,0 +1,176 @@
+diff --git a/src/components/MessageBubble.vue b/src/components/MessageBubble.vue
+index a7547d3..fc2e390 100644
+--- a/src/components/MessageBubble.vue
++++ b/src/components/MessageBubble.vue
+@@ -60,7 +60,7 @@
+             <span class="reply-quote-bar" aria-hidden="true" />
+             <span class="reply-quote-body">
+               <span class="reply-quote-name">{{ replyPreview.name }}</span>
+-              <span class="reply-quote-text">{{ replyPreview.snippet }}</span>
++              <span class="reply-quote-text">{{ replySnippetFinal }}</span>
+             </span>
+           </button>
+           <div v-if="msg.fileUuid" class="attachment">
+@@ -214,6 +214,7 @@
+ import { computed, ref, watch, onBeforeUnmount } from 'vue'
+ import { formatMessageTime, useChatStore } from '../stores/chat'
+ import { getFileUrl } from '../services/files'
++import { isEncryptedText } from '../services/crypto'
+ import AudioPlayer from './AudioPlayer.vue'
+ import VoiceMessagePlayer from './VoiceMessagePlayer.vue'
+ import VideoNotePlayer from './VideoNotePlayer.vue'
+@@ -346,6 +347,64 @@ const replyPreview = computed(() => {
+   }
+ })
+ 
++// Превью цитаты/закрепа через тот же E2EE-пайплайн дешифровки, что и лента:
++// если найденное сообщение всё ещё содержит сырой e2ee:* текст — дешифруем на лету.
++const decryptedReplySnippet = ref('')
++
++async function refreshReplySnippet() {
++  const rid = props.msg?.respondMessageId ?? props.msg?.respond_message_id
++  if (rid == null || rid === '') {
++    decryptedReplySnippet.value = ''
++    return
++  }
++  const idNum = Number(rid)
++  const list = props.chatMessages || []
++  const found = list.find((m) => Number(m.id) === idNum || String(m.id) === String(rid))
++  if (!found) {
++    decryptedReplySnippet.value = ''
++    return
++  }
++  // нешифрованный текст уже готов — используем обычное превью
++  const raw = found.text ?? ''
++  const looksEncrypted =
++    isEncryptedText(raw) || /^e2ee:v\d+:/i.test(String(raw).trim())
++  if (!looksEncrypted) {
++    decryptedReplySnippet.value = ''
++    return
++  }
++  try {
++    const plain = await store.resolveDisplayTextFor(found)
++    decryptedReplySnippet.value = plain && !isEncryptedText(plain) ? plain : ''
++  } catch (e) {
++    console.warn('reply snippet decrypt:', e)
++    decryptedReplySnippet.value = ''
++  }
++}
++
++watch(
++  () => [
++    props.msg?.respondMessageId ?? props.msg?.respond_message_id,
++    props.chatMessages?.length,
++    (() => {
++      const rid = props.msg?.respondMessageId ?? props.msg?.respond_message_id
++      const m = (props.chatMessages || []).find(
++        (x) => Number(x.id) === Number(rid) || String(x.id) === String(rid)
++      )
++      return m?.text
++    })()
++  ],
++  refreshReplySnippet,
++  { immediate: true }
++)
++
++const replySnippetFinal = computed(() => {
++  if (decryptedReplySnippet.value) {
++    const t = decryptedReplySnippet.value.trim()
++    return t.length > 120 ? t.slice(0, 117) + '…' : t
++  }
++  return replyPreview.value?.snippet || 'Сообщение'
++})
++
+ const fileUrl = computed(() => getFileUrl(props.msg.fileUuid))
+ const timeLabel = computed(() => formatMessageTime(props.msg.createdAt) || '·')
+ 
+diff --git a/src/services/crypto.js b/src/services/crypto.js
+index 0ed1c9c..ad910b1 100644
+--- a/src/services/crypto.js
++++ b/src/services/crypto.js
+@@ -450,6 +450,36 @@ export function tryConsumeKeyAnnounce(senderId, text) {
+   return true
+ }
+ 
++/**
++ * Единая точка дешифровки текста для отображения (в т.ч. превью цитат/закрепов).
++ * Маршрутизирует rawText в зависимости от типа чата:
++ *  - канал  -> resolveChannelE2eeDisplayText (shared channel key)
++ *  - группа -> resolveGroupE2eeDisplayText   (shared group key)
++ *  - диалог -> resolveE2eeDisplayText        (pairwise E2EE)
++ * Возвращает '' для control-сообщений (раздача ключей).
++ */
++export async function resolveChatE2eeDisplayText({ chatType, chatId, senderId, myUserId }, rawText) {
++  if (rawText == null || rawText === '') return rawText ?? ''
++  const enc = isEncryptedText(rawText) || isGroupEncryptedText(rawText) ||
++    (typeof rawText === 'string' && /^e2ee:v\d+:/i.test(rawText.trim()))
++  if (!enc) return rawText
++  try {
++    if (chatType === 'channel') {
++      const plain = await resolveChannelE2eeDisplayText(chatId, rawText, senderId, myUserId)
++      return plain == null ? 'Зашифрованное сообщение' : plain
++    }
++    if (chatType === 'group') {
++      const plain = await resolveGroupE2eeDisplayText(chatId, rawText, senderId, myUserId)
++      return plain == null ? 'Зашифрованное сообщение' : plain
++    }
++    const plain = await resolveE2eeDisplayText(senderId, rawText)
++    return plain == null ? 'Зашифрованное сообщение' : plain
++  } catch (e) {
++    console.warn('resolveChatE2eeDisplayText:', e)
++    return 'Зашифрованное сообщение'
++  }
++}
++
+ /**
+  * Всегда возвращает текст для UI: plaintext либо «Зашифрованное сообщение».
+  * Никогда не отдаёт сырой e2ee:* в интерфейс.
+diff --git a/src/stores/chat.js b/src/stores/chat.js
+index 4dfb541..52c807b 100644
+--- a/src/stores/chat.js
++++ b/src/stores/chat.js
+@@ -14,6 +14,7 @@ import {
+   isChannelEncryptedText,
+   resolveChannelE2eeDisplayText,
+   resolveGroupE2eeDisplayText,
++  resolveChatE2eeDisplayText,
+   consumeGroupKeyMessage
+ } from '../services/crypto'
+ import { getGroup } from '../services/groups'
+@@ -231,6 +232,36 @@ export const useChatStore = defineStore('chat', {
+   },
+ 
+   actions: {
++    /**
++     * Текст сообщения для отображения в превью (цитаты/закреплённые) —
++     * прогоняет rawText через тот же E2EE-пайплайн дешифровки, что и лента.
++     * Если сообщение ещё не расшифровано в сторе (raw e2ee:*), дешифруем на лету.
++     */
++    async resolveDisplayTextFor(m) {
++      if (!m) return ''
++      const raw = m.text ?? ''
++      const encrypted =
++        isEncryptedText(raw) ||
++        isGroupEncryptedText(raw) ||
++        (typeof raw === 'string' && /^e2ee:v\d+:/i.test(raw.trim()))
++      if (!encrypted) return raw
++      // уже есть расшифрованная версия в ленте того же чата — берём её
++      const chatId = m.channelId || m.groupId || String(m.recipientId ?? m.senderId ?? '')
++      const chat = this.chats.find((c) => String(c.id) === String(chatId))
++      const decrypted = chat?.messages?.find(
++        (x) => (Number(x.id) === Number(m.id) || String(x.id) === String(m.id)) && !isEncryptedText(x.text ?? '')
++      )
++      if (decrypted) return decrypted.text
++      const ctx = m.channelId
++        ? { chatType: 'channel', chatId: m.channelId }
++        : m.groupId
++          ? { chatType: 'group', chatId: m.groupId }
++          : { chatType: 'direct', chatId: null }
++      return resolveChatE2eeDisplayText(
++        { ...ctx, senderId: m.senderId, myUserId: this.myUserId },
++        raw
++      )
++    },
+     setAuthenticated(value) {
+       this.isAuthenticated = value
+     },
