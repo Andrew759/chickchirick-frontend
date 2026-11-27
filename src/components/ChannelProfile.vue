@@ -316,7 +316,10 @@ import {
   listChannelMembers,
   addChannelMembers,
   subscribeChannel,
-  unsubscribeChannel
+  unsubscribeChannel,
+  listChannelMedia,
+  addChannelMedia,
+  removeChannelMedia
 } from '../services/channels'
 import PhotoViewer from './PhotoViewer.vue'
 import AvatarEqualizer from './AvatarEqualizer.vue'
@@ -616,24 +619,48 @@ function mediaStorageKey(uuid) {
   return `cc_channel_media_${uuid}`
 }
 
-function loadTracksFromStorage(uuid) {
+async function loadTracksFromServer(uuid) {
   if (!uuid) {
     tracks.value = []
     return
   }
-  try {
-    const raw = JSON.parse(localStorage.getItem(mediaStorageKey(uuid)) || '[]')
-    tracks.value = Array.isArray(raw) ? raw.filter((t) => t?.fileUuid) : []
-  } catch {
-    tracks.value = []
-  }
-}
 
-function saveTracksToStorage(uuid) {
-  if (!uuid) return
-  try {
-    localStorage.setItem(mediaStorageKey(uuid), JSON.stringify(tracks.value))
-  } catch (_) { /* quota */ }
+  // Read the shared server-side list first. This is the source of truth.
+  let remote = await listChannelMedia(uuid)
+  let normalized = (Array.isArray(remote) ? remote : []).map((item) => ({
+    fileUuid: item.file_uuid || item.fileUuid,
+    fileName: item.file_name || item.fileName || 'Трек',
+    kind: item.kind || 'audio'
+  })).filter((item) => item.fileUuid)
+
+  // One-time migration for tracks created by the old localStorage-only version.
+  // Only an owner/admin can migrate them; ordinary members never overwrite server data.
+  if (canEdit.value) {
+    try {
+      const legacy = JSON.parse(localStorage.getItem(mediaStorageKey(uuid)) || '[]')
+      const known = new Set(normalized.map((item) => item.fileUuid))
+      let migrated = false
+      for (const item of (Array.isArray(legacy) ? legacy : [])) {
+        if (!item?.fileUuid || known.has(item.fileUuid)) continue
+        await addChannelMedia(uuid, item)
+        known.add(item.fileUuid)
+        migrated = true
+      }
+      if (migrated) remote = await listChannelMedia(uuid)
+      if (Array.isArray(legacy) && legacy.length) localStorage.removeItem(mediaStorageKey(uuid))
+      if (migrated) {
+        normalized = (Array.isArray(remote) ? remote : []).map((item) => ({
+          fileUuid: item.file_uuid || item.fileUuid,
+          fileName: item.file_name || item.fileName || 'Трек',
+          kind: item.kind || 'audio'
+        })).filter((item) => item.fileUuid)
+      }
+    } catch (e) {
+      // Keep legacy data if migration fails; still show the server list.
+      console.warn('channel media legacy migration failed:', e)
+    }
+  }
+  tracks.value = normalized
 }
 
 function fileUrl(uuid) {
@@ -681,11 +708,15 @@ async function onMusicSelected(e) {
       }
       const fileUuid = crypto.randomUUID()
       await uploadFile(fileUuid, file)
-      tracks.value = [
-        ...tracks.value,
-        { fileUuid, fileName: file.name || 'Трек', kind: 'audio' }
-      ]
-      saveTracksToStorage(uuid)
+      const track = { fileUuid, fileName: file.name || 'Трек', kind: 'audio' }
+      try {
+        await addChannelMedia(uuid, track)
+      } catch (linkError) {
+        // Do not leave an orphaned file when the channel association fails.
+        await deleteFile(fileUuid).catch(() => {})
+        throw linkError
+      }
+      tracks.value = [...tracks.value, track]
     }
     uploadProgress.value = ''
   } catch (err) {
@@ -699,12 +730,13 @@ async function onMusicSelected(e) {
 async function removeTrack(track) {
   const uuid = channelUuid.value
   if (!uuid || !track?.fileUuid) return
-  tracks.value = tracks.value.filter((t) => t.fileUuid !== track.fileUuid)
-  saveTracksToStorage(uuid)
+  mediaError.value = ''
   try {
+    await removeChannelMedia(uuid, track.fileUuid)
+    tracks.value = tracks.value.filter((t) => t.fileUuid !== track.fileUuid)
     await deleteFile(track.fileUuid)
   } catch (e) {
-    console.warn('delete track file:', e)
+    mediaError.value = e.message || 'Не удалось удалить трек'
   }
 }
 
@@ -723,7 +755,7 @@ async function loadAll() {
     editDescription.value = ch.description || ''
     editIsPublic.value = Boolean(ch.is_public)
     await loadMembers(uuid)
-    loadTracksFromStorage(uuid)
+    await loadTracksFromServer(uuid)
     store.ensureChannelChat(ch)
   } catch (e) {
     error.value = e.message || 'Не удалось загрузить канал'

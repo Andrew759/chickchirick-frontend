@@ -299,3 +299,36 @@ export async function editChannelMessage(chatUuid, messageId, payload) {
   }
   return res.status === 204 ? true : res.json().catch(() => true)
 }
+
+
+/** Общая музыка канала, доступная всем его участникам/читателям. */
+export async function listChannelMedia(channelUuid) {
+  const res = await fetch(`${API}/channels/${encodeURIComponent(channelUuid)}/media`, { credentials: 'include' })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || `list channel media failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function addChannelMedia(channelUuid, media) {
+  const res = await fetch(`${API}/channels/${encodeURIComponent(channelUuid)}/media`, {
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file_uuid: media.fileUuid, file_name: media.fileName || '', kind: media.kind || 'audio' })
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || `add channel media failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function removeChannelMedia(channelUuid, fileUuid) {
+  const res = await fetch(`${API}/channels/${encodeURIComponent(channelUuid)}/media/${encodeURIComponent(fileUuid)}`, {
+    method: 'DELETE', credentials: 'include'
+  })
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || `remove channel media failed: ${res.status}`)
+  }
+}
