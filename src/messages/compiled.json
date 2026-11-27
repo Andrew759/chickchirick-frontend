@@ -1,0 +1,168 @@
+{
+  "nested": {
+    "auth": {
+      "options": {
+        "go_package": "internal/gen/auth"
+      },
+      "nested": {
+        "AuthService": {
+          "methods": {
+            "ValidateToken": {
+              "requestType": "ValidateRequest",
+              "responseType": "ValidateResponse"
+            }
+          }
+        },
+        "ValidateRequest": {
+          "fields": {
+            "token": {
+              "type": "string",
+              "id": 1
+            }
+          }
+        },
+        "ValidateResponse": {
+          "fields": {
+            "valid": {
+              "type": "bool",
+              "id": 1
+            },
+            "userUuid": {
+              "type": "string",
+              "id": 2,
+              "protoName": "user_uuid"
+            }
+          }
+        }
+      }
+    },
+    "messenger": {
+      "options": {
+        "go_package": "./gen/messenger"
+      },
+      "nested": {
+        "MessengerService": {
+          "methods": {
+            "MessageStream": {
+              "requestType": "SendMessageRequest",
+              "requestStream": true,
+              "responseType": "MessageEvent",
+              "responseStream": true
+            }
+          }
+        },
+        "Message": {
+          "oneofs": {
+            "_respondMessageId": {
+              "oneof": [
+                "respondMessageId"
+              ]
+            }
+          },
+          "fields": {
+            "id": {
+              "type": "int64",
+              "id": 1
+            },
+            "senderId": {
+              "type": "int64",
+              "id": 2,
+              "protoName": "sender_id"
+            },
+            "recipientId": {
+              "type": "int64",
+              "id": 3,
+              "protoName": "recipient_id"
+            },
+            "text": {
+              "type": "string",
+              "id": 4
+            },
+            "createdAt": {
+              "type": "google.protobuf.Timestamp",
+              "id": 5,
+              "protoName": "created_at"
+            },
+            "respondMessageId": {
+              "type": "int64",
+              "id": 6,
+              "protoName": "respond_message_id",
+              "options": {
+                "proto3_optional": true
+              }
+            }
+          }
+        },
+        "SendMessageRequest": {
+          "oneofs": {
+            "_respondMessageId": {
+              "oneof": [
+                "respondMessageId"
+              ]
+            }
+          },
+          "fields": {
+            "recipientId": {
+              "type": "int64",
+              "id": 1,
+              "protoName": "recipient_id"
+            },
+            "text": {
+              "type": "string",
+              "id": 2
+            },
+            "respondMessageId": {
+              "type": "int64",
+              "id": 3,
+              "protoName": "respond_message_id",
+              "options": {
+                "proto3_optional": true
+              }
+            }
+          }
+        },
+        "MessageEvent": {
+          "oneofs": {
+            "event": {
+              "oneof": [
+                "message",
+                "deletedMessageId"
+              ]
+            }
+          },
+          "fields": {
+            "message": {
+              "type": "Message",
+              "id": 1
+            },
+            "deletedMessageId": {
+              "type": "int64",
+              "id": 2,
+              "protoName": "deleted_message_id"
+            }
+          }
+        }
+      }
+    },
+    "google": {
+      "nested": {
+        "protobuf": {
+          "nested": {
+            "Timestamp": {
+              "fields": {
+                "seconds": {
+                  "type": "int64",
+                  "id": 1
+                },
+                "nanos": {
+                  "type": "int32",
+                  "id": 2
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
